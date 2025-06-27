@@ -2,7 +2,9 @@ import { Checkbox, ConfirmationAlertDialog, Flex, FormControl, FormLabel, Text }
 import { useAppDispatch, useAppSelector } from 'app/store/storeHooks';
 import { useAssertSingleton } from 'common/hooks/useAssertSingleton';
 import { buildUseBoolean } from 'common/hooks/useBoolean';
+import { canvasReset } from 'features/controlLayers/store/actions';
 import { canvasSessionReset } from 'features/controlLayers/store/canvasStagingAreaSlice';
+import { paramsReset } from 'features/controlLayers/store/paramsSlice';
 import {
   selectSystemShouldConfirmOnNewSession,
   shouldConfirmOnNewSessionToggled,
@@ -21,10 +23,17 @@ export const useNewCanvasSession = () => {
   const autoLayoutContext = useAutoLayoutContextSafe();
 
   const newCanvasSessionImmediate = useCallback(() => {
+    // Clear the canvas state, reset parameters, and reset the session
+    dispatch(canvasReset());
+    dispatch(paramsReset());
     dispatch(canvasSessionReset());
+    
     // Navigate to the Launchpad after clearing the canvas
+    // Use setTimeout to ensure this happens after the tab change from canvasReset
     if (autoLayoutContext) {
-      autoLayoutContext.focusPanel(LAUNCHPAD_PANEL_ID);
+      setTimeout(() => {
+        autoLayoutContext.focusPanel(LAUNCHPAD_PANEL_ID);
+      }, 0);
     }
   }, [dispatch, autoLayoutContext]);
 
