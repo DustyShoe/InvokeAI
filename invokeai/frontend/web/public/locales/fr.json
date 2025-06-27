@@ -2103,7 +2103,7 @@
         "savedToGalleryOk": "Enregistré dans la galerie",
         "addPositivePrompt": "Ajouter $t(controlLayers.prompt)",
         "showProgressOnCanvas": "Afficher la progression sur la Toile",
-        "newGallerySession": "Nouvelle session de galerie",
+    
         "newCanvasSession": "Nouvelle session de toile",
         "showingType": "Afficher {{type}}",
         "viewProgressInViewer": "Voir les progrès et les résultats dans le <Btn>Visionneur d'images</Btn>.",
@@ -2161,7 +2161,7 @@
         "regionalGuidance_withCount_one": "$t(controlLayers.regionalGuidance)",
         "regionalGuidance_withCount_many": "Guidage Régional",
         "regionalGuidance_withCount_other": "Guidage Régional",
-        "newGallerySessionDesc": "Cela effacera la toile et tous les paramètres, sauf votre sélection de modèle. Les générations seront envoyées à la galerie.",
+    
         "inpaintMask_withCount_one": "$t(controlLayers.inpaintMask)",
         "inpaintMask_withCount_many": "Remplir les masques",
         "inpaintMask_withCount_other": "Remplir les masques",

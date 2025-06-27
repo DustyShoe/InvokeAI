@@ -2193,8 +2193,7 @@
         "pullBboxIntoReferenceImage": "Carica l'immagine delimitata nel riquadro",
         "showProgressOnCanvas": "Mostra i progressi sulla Tela",
         "weight": "Peso",
-        "newGallerySession": "Nuova sessione Galleria",
-        "newGallerySessionDesc": "Questo cancellerà la tela e tutte le impostazioni, eccetto la selezione del modello. Le generazioni saranno inviate alla galleria.",
+        
         "newCanvasSession": "Nuova sessione Tela",
         "deleteSelected": "Elimina selezione",
         "settings": {

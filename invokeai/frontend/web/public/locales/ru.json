@@ -1875,7 +1875,7 @@
         "addInpaintMask": "Добавить $t(controlLayers.inpaintMask)",
         "inpaintMasks_withCount_hidden": "Маски перерисовки ({{count}} скрыто)",
         "regionalGuidance_withCount_visible": "Региональная точность ({{count}})",
-        "newGallerySessionDesc": "Это очистит холст и все настройки, кроме выбранной модели. Генерации будут отправлены в галерею.",
+    
         "newCanvasSession": "Новая сессия холста",
         "newCanvasSessionDesc": "Это очистит холст и все настройки, кроме выбора модели. Генерации будут размещены на холсте.",
         "cropLayerToBbox": "Обрезать слой по ограничительной рамке",
@@ -1907,7 +1907,7 @@
         "rasterLayer_withCount_many": "Растровых слоев",
         "transparency": "Прозрачность",
         "weight": "Вес",
-        "newGallerySession": "Новая сессия галереи",
+    
         "sendToCanvasDesc": "Нажатие кнопки Invoke отображает вашу текущую работу на холсте.",
         "globalReferenceImages_withCount_hidden": "Глобальные эталонные изображения ({{count}} скрыто)",
         "layer_withCount_one": "Слой ({{count}})",

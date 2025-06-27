@@ -1631,7 +1631,7 @@
         "addControlLayer": "$t(controlLayers.controlLayer) hinzufügen",
         "newCanvasSession": "Neue Leinwand-Sitzung",
         "replaceLayer": "Ebene ersetzen",
-        "newGallerySession": "Neue Galerie-Sitzung",
+    
         "unlocked": "Entsperrt",
         "showProgressOnCanvas": "Fortschritt auf Leinwand anzeigen",
         "controlMode": {

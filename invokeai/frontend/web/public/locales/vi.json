@@ -1797,7 +1797,7 @@
         "copyRasterLayerTo": "Sao Chép $t(controlLayers.rasterLayer) Tới",
         "copyControlLayerTo": "Sao Chép $t(controlLayers.controlLayer) Tới",
         "newRegionalGuidance": "$t(controlLayers.regionalGuidance) Mới",
-        "newGallerySessionDesc": "Nó sẽ dọn sạch canvas và các thiết lập trừ model được chọn. Các ảnh được tạo sinh sẽ được chuyển đến thư viện ảnh.",
+    
         "stagingOnCanvas": "Hiển thị hình ảnh lên",
         "pullBboxIntoReferenceImage": "Chuyển Hộp Giới Hạn Vào Ảnh Mẫu",
         "maskFill": "Lấp Đầy Lớp Phủ",
@@ -1819,7 +1819,7 @@
         "deleteReferenceImage": "Xoá Ảnh Mẫu",
         "inpaintMasks_withCount_visible": "Lớp Phủ Inpaint ({{count}})",
         "disableTransparencyEffect": "Tắt Hiệu Ứng Trong Suốt",
-        "newGallerySession": "Phiên Thư Viện Ảnh Mới",
+    
         "sendToGalleryDesc": "Bấm 'Kích Hoạt' sẽ tiến hành tạo sinh và lưu ảnh vào thư viện ảnh.",
         "opacity": "Độ Mờ Đục",
         "rectangle": "Hình Chữ Nhật",
