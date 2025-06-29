@@ -1,6 +1,8 @@
 import { IconButton, Tooltip } from '@invoke-ai/ui-library';
 import { useAppDispatch } from 'app/store/storeHooks';
 import { workflowModeChanged } from 'features/nodes/store/workflowLibrarySlice';
+import { useAutoLayoutContext } from 'features/ui/layouts/auto-layout-context';
+import { VIEWER_PANEL_ID } from 'features/ui/layouts/shared';
 import { useLoadWorkflowWithDialog } from 'features/workflowLibrary/components/LoadWorkflowConfirmationAlertDialog';
 import type { MouseEvent } from 'react';
 import { useCallback } from 'react';
@@ -11,6 +13,7 @@ export const ViewWorkflow = ({ workflowId }: { workflowId: string }) => {
   const dispatch = useAppDispatch();
   const loadWorkflowWithDialog = useLoadWorkflowWithDialog();
   const { t } = useTranslation();
+  const { focusPanel } = useAutoLayoutContext();
 
   const handleClickLoad = useCallback(
     (e: MouseEvent<HTMLButtonElement>) => {
@@ -20,10 +23,11 @@ export const ViewWorkflow = ({ workflowId }: { workflowId: string }) => {
         data: workflowId,
         onSuccess: () => {
           dispatch(workflowModeChanged('view'));
+          focusPanel(VIEWER_PANEL_ID);
         },
       });
     },
-    [dispatch, loadWorkflowWithDialog, workflowId]
+    [dispatch, focusPanel, loadWorkflowWithDialog, workflowId]
   );
 
   return (
