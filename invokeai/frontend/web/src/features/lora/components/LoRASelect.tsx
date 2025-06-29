@@ -57,16 +57,16 @@ const LoRASelect = () => {
     },
   });
 
-  const currentBaseModel = useAppSelector(state => state.params.model?.base);
-  
+  const currentBaseModel = useAppSelector((state) => state.params.model?.base);
+
   // Filter to only show compatible LoRAs
   const compatibleLoRAs = useMemo(() => {
     if (!currentBaseModel) {
       return [];
     }
-    return modelConfigs.filter(model => model.base === currentBaseModel);
+    return modelConfigs.filter((model) => model.base === currentBaseModel);
   }, [modelConfigs, currentBaseModel]);
-  
+
   const getIsDisabled = useCallback(
     (model: LoRAModelConfig): boolean => {
       const isAdded = Boolean(addedLoRAs.find((lora) => lora.model.key === model.key));
