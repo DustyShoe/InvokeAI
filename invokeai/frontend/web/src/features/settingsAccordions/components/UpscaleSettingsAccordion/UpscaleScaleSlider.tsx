@@ -5,7 +5,7 @@ import { scaleChanged, selectUpscaleScale } from 'features/parameters/store/upsc
 import { memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
-const marks = [2, 4, 8];
+const marks = [1, 2, 4, 8];
 
 const formatValue = (val: string | number) => `${val}x`;
 
@@ -28,22 +28,24 @@ export const UpscaleScaleSlider = memo(() => {
       </InformationalPopover>
       <Flex w="full" gap={4}>
         <CompositeSlider
-          min={2}
+          min={1}
           max={8}
           value={scale}
           onChange={onChange}
           marks={marks}
           formatValue={formatValue}
           defaultValue={4}
+          step={0.5}
         />
         <CompositeNumberInput
           maxW={20}
           value={scale}
           onChange={onChange}
           defaultValue={4}
-          min={2}
+          min={1}
           max={16}
           format={formatValue}
+          step={0.5}
         />
       </Flex>
     </FormControl>
