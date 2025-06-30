@@ -320,6 +320,7 @@ export const downloadBlob = (blob: Blob, fileName: string) => {
   a.click();
   document.body.removeChild(a);
   a.remove();
+  URL.revokeObjectURL(url);
 };
 
 /**
