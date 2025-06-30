@@ -321,7 +321,7 @@ const ModelTag = ({
   return (
     <Tag py={2} px={4} bg={`${getModelTagColor(model.type)}.700`}>
       <Tooltip label={`${model.type}: ${model.name}`} hasArrow>
-        <TagLabel maxWidth="50px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+        <TagLabel maxWidth="200px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
           {model.name}
         </TagLabel>
       </Tooltip>
