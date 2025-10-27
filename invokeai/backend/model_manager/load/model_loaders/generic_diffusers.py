@@ -36,16 +36,36 @@ class GenericDiffusersLoader(ModelLoader):
             raise Exception(f"There are no submodels in models of type {model_class}")
         repo_variant = config.repo_variant if isinstance(config, Diffusers_Config_Base) else None
         variant = repo_variant.value if repo_variant else None
+        use_safetensors = self._has_safetensors_weights(model_path)
+        load_kwargs: dict[str, Any] = {"torch_dtype": self._torch_dtype}
+        if variant:
+            load_kwargs["variant"] = variant
+        if use_safetensors:
+            load_kwargs["use_safetensors"] = True
         try:
-            result: AnyModel = model_class.from_pretrained(model_path, torch_dtype=self._torch_dtype, variant=variant)
+            result: AnyModel = model_class.from_pretrained(model_path, **load_kwargs)
         except OSError as e:
             if variant and "no file named" in str(
                 e
             ):  # try without the variant, just in case user's preferences changed
-                result = model_class.from_pretrained(model_path, torch_dtype=self._torch_dtype)
+                fallback_kwargs = {"torch_dtype": self._torch_dtype}
+                if use_safetensors:
+                    fallback_kwargs["use_safetensors"] = True
+                result = model_class.from_pretrained(model_path, **fallback_kwargs)
             else:
                 raise e
         return result
+
+    @staticmethod
+    def _has_safetensors_weights(model_path: Path) -> bool:
+        """Return True if the diffusers directory contains any safetensors weights."""
+
+        try:
+            next(model_path.glob("**/*.safetensors"))
+        except StopIteration:
+            return False
+        else:
+            return True
 
     # TO DO: Add exception handling
     def get_hf_load_class(self, model_path: Path, submodel_type: Optional[SubModelType] = None) -> ModelMixin:
