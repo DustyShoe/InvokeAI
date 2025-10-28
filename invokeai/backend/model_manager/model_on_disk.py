@@ -251,4 +251,3 @@ class ModelOnDisk:
             return (priority, normalized)
 
         return min(weight_files, key=score)
-        
