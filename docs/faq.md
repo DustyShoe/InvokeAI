@@ -10,6 +10,10 @@ Follow the [Quick Start guide](./installation/quick_start.md) to install Invoke.
 
 The Model Manager tab in the UI provides a few ways to install models, including using your already-downloaded models. You'll see a popup directing you there on first startup. For more information, see the [model install docs].
 
+## Model installation fails after updating to v6.9.0
+
+Yes. The 6.9.0 release shipped with the "model manager v3" refactor, which now calls `ModelOnDisk.load_state_dict()` without specifying a weight file when it tries to identify models such as Flux during installation. Under the initial 6.9.0 code this triggered `ModelOnDisk.resolve_weight_file()`, which aborted as soon as it saw more than one shard in the model directory—a layout that Flux and other large diffusers repos use by default. The previous (v6.8.x) probe never invoked `load_state_dict()` while inspecting diffusers directories, so multi-shard installs completed successfully before the upgrade. The regression therefore first appears in the 6.9.0 line, immediately after the refactor landed and the version number was bumped for the release.
+
 ## Missing models after updating from v3
 
 If you find some models are missing after updating from v3, it's likely they weren't correctly registered before the update and didn't get picked up in the migration.
