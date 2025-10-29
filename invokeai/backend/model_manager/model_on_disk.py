@@ -41,6 +41,14 @@ class ModelOnDisk:
         self._state_dict_cache.clear()
         self._metadata_cache.clear()
 
+    # Context manager helpers -------------------------------------------------
+
+    def __enter__(self) -> "ModelOnDisk":
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.clear_cache()
+
     def hash(self) -> str:
         return ModelHash(algorithm=self.hash_algo).hash(self.path)
 
