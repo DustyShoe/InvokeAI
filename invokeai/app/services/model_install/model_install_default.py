@@ -42,7 +42,6 @@ from invokeai.backend.model_manager.configs.factory import (
     ModelConfigFactory,
 )
 from invokeai.backend.model_manager.configs.unknown import Unknown_Config
-from invokeai.backend.model_manager.model_on_disk import ModelOnDisk
 from invokeai.backend.model_manager.metadata import (
     AnyModelRepoMetadata,
     HuggingFaceMetadataFetch,
@@ -51,6 +50,7 @@ from invokeai.backend.model_manager.metadata import (
     RemoteModelFile,
 )
 from invokeai.backend.model_manager.metadata.metadata_base import HuggingFaceMetadata
+from invokeai.backend.model_manager.model_on_disk import ModelOnDisk
 from invokeai.backend.model_manager.search import ModelSearch
 from invokeai.backend.model_manager.taxonomy import ModelRepoVariant, ModelSourceType
 from invokeai.backend.model_manager.util.lora_metadata_extractor import apply_lora_metadata
