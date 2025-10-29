@@ -50,6 +50,7 @@ from invokeai.backend.model_manager.metadata import (
     RemoteModelFile,
 )
 from invokeai.backend.model_manager.metadata.metadata_base import HuggingFaceMetadata
+from invokeai.backend.model_manager.model_on_disk import ModelOnDisk
 from invokeai.backend.model_manager.search import ModelSearch
 from invokeai.backend.model_manager.taxonomy import ModelRepoVariant, ModelSourceType
 from invokeai.backend.model_manager.util.lora_metadata_extractor import apply_lora_metadata
@@ -618,12 +619,13 @@ class ModelInstallService(ModelInstallServiceBase):
         hash_algo = self._app_config.hashing_algorithm
         fields = config.model_dump()
 
-        result = ModelConfigFactory.from_model_on_disk(
-            mod=model_path,
-            override_fields=deepcopy(fields),
-            hash_algo=hash_algo,
-            allow_unknown=self.app_config.allow_unknown_models,
-        )
+        with ModelOnDisk(model_path, hash_algo) as mod:
+            result = ModelConfigFactory.from_model_on_disk(
+                mod=mod,
+                override_fields=deepcopy(fields),
+                hash_algo=hash_algo,
+                allow_unknown=self.app_config.allow_unknown_models,
+            )
 
         if result.config is None:
             self._logger.error(f"Could not identify model for {model_path}, detailed results: {result.details}")

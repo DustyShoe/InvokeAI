@@ -423,8 +423,11 @@ class ModelConfigFactory:
         Raises:
             ValueError: If the provided path doesn't look like a model.
         """
-        if isinstance(mod, Path | str):
+        owns_mod = isinstance(mod, (Path, str))
+        if owns_mod:
             mod = ModelOnDisk(Path(mod), hash_algo)
+
+        assert isinstance(mod, ModelOnDisk)
 
         # Perform basic sanity checks before attempting any config matching
         # This rejects obviously non-model paths early, saving time
@@ -437,55 +440,59 @@ class ModelConfigFactory:
         # that was raised when trying to build it.
         details: dict[str, AnyModelConfig | Exception] = {}
 
-        # Try to build an instance of each model config class that uses the classify API.
-        # Each class will either return an instance of itself or raise NotAMatch if it doesn't match.
-        # Other exceptions may be raised if something unexpected happens during matching or building.
-        for candidate_class in filter(lambda x: x is not Unknown_Config, Config_Base.CONFIG_CLASSES):
-            candidate_name = candidate_class.__name__
-            try:
-                # Technically, from_model_on_disk returns a Config_Base, but in practice it will always be a member of
-                # the AnyModelConfig union.
-                details[candidate_name] = candidate_class.from_model_on_disk(mod, fields)  # type: ignore
-            except NotAMatchError as e:
-                # This means the model didn't match this config class. It's not an error, just no match.
-                details[candidate_name] = e
-            except ValidationError as e:
-                # This means the model matched, but we couldn't create the pydantic model instance for the config.
-                # Maybe invalid overrides were provided?
-                details[candidate_name] = e
-            except Exception as e:
-                # Some other unexpected error occurred. Store the exception for reporting later.
-                details[candidate_name] = e
+        try:
+            # Try to build an instance of each model config class that uses the classify API.
+            # Each class will either return an instance of itself or raise NotAMatch if it doesn't match.
+            # Other exceptions may be raised if something unexpected happens during matching or building.
+            for candidate_class in filter(lambda x: x is not Unknown_Config, Config_Base.CONFIG_CLASSES):
+                candidate_name = candidate_class.__name__
+                try:
+                    # Technically, from_model_on_disk returns a Config_Base, but in practice it will always be a member of
+                    # the AnyModelConfig union.
+                    details[candidate_name] = candidate_class.from_model_on_disk(mod, fields)  # type: ignore
+                except NotAMatchError as e:
+                    # This means the model didn't match this config class. It's not an error, just no match.
+                    details[candidate_name] = e
+                except ValidationError as e:
+                    # This means the model matched, but we couldn't create the pydantic model instance for the config.
+                    # Maybe invalid overrides were provided?
+                    details[candidate_name] = e
+                except Exception as e:
+                    # Some other unexpected error occurred. Store the exception for reporting later.
+                    details[candidate_name] = e
 
-        # Extract just the successful matches
-        matches = [r for r in details.values() if isinstance(r, Config_Base)]
+            # Extract just the successful matches
+            matches = [r for r in details.values() if isinstance(r, Config_Base)]
 
-        if not matches:
-            if not allow_unknown:
-                # No matches and we are not allowed to fall back to Unknown_Config
-                return ModelClassificationResult(config=None, details=details)
-            else:
-                # Fall back to Unknown_Config
-                # This should always succeed as Unknown_Config.from_model_on_disk never raises NotAMatch
-                config = Unknown_Config.from_model_on_disk(mod, fields)
-                details[Unknown_Config.__name__] = config
-                return ModelClassificationResult(config=config, details=details)
+            if not matches:
+                if not allow_unknown:
+                    # No matches and we are not allowed to fall back to Unknown_Config
+                    return ModelClassificationResult(config=None, details=details)
+                else:
+                    # Fall back to Unknown_Config
+                    # This should always succeed as Unknown_Config.from_model_on_disk never raises NotAMatch
+                    config = Unknown_Config.from_model_on_disk(mod, fields)
+                    details[Unknown_Config.__name__] = config
+                    return ModelClassificationResult(config=config, details=details)
 
-        matches.sort(key=ModelConfigFactory.matches_sort_key)
-        config = matches[0]
+            matches.sort(key=ModelConfigFactory.matches_sort_key)
+            config = matches[0]
 
-        # Now do any post-processing needed for specific model types/bases/etc.
-        match config.type:
-            case ModelType.Main:
-                config.default_settings = MainModelDefaultSettings.from_base(config.base)
-            case ModelType.ControlNet | ModelType.T2IAdapter | ModelType.ControlLoRa:
-                config.default_settings = ControlAdapterDefaultSettings.from_model_name(config.name)
-            case ModelType.LoRA:
-                config.default_settings = LoraModelDefaultSettings()
-            case _:
-                pass
+            # Now do any post-processing needed for specific model types/bases/etc.
+            match config.type:
+                case ModelType.Main:
+                    config.default_settings = MainModelDefaultSettings.from_base(config.base)
+                case ModelType.ControlNet | ModelType.T2IAdapter | ModelType.ControlLoRa:
+                    config.default_settings = ControlAdapterDefaultSettings.from_model_name(config.name)
+                case ModelType.LoRA:
+                    config.default_settings = LoraModelDefaultSettings()
+                case _:
+                    pass
 
-        return ModelClassificationResult(config=config, details=details)
+            return ModelClassificationResult(config=config, details=details)
+        finally:
+            if owns_mod:
+                mod.clear_cache()
 
 
 MODEL_NAME_TO_PREPROCESSOR = {
