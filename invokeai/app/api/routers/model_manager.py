@@ -215,8 +215,8 @@ async def reidentify_model(
             model_path = pathlib.Path(config.path)
         else:
             model_path = models_path / config.path
-        mod = ModelOnDisk(model_path)
-        result = ModelConfigFactory.from_model_on_disk(mod)
+        with ModelOnDisk(model_path) as mod:
+            result = ModelConfigFactory.from_model_on_disk(mod)
         if result.config is None:
             raise InvalidModelException("Unable to identify model format")
         result.config.key = config.key  # retain the same key

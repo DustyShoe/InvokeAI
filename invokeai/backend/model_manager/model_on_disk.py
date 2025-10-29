@@ -1,3 +1,5 @@
+import json
+from collections import Counter
 from pathlib import Path
 from typing import Any, Optional, TypeAlias
 
@@ -32,6 +34,12 @@ class ModelOnDisk:
         # This prevents redundant computations during matching and parsing
         self._state_dict_cache: dict[Path, Any] = {}
         self._metadata_cache: dict[Path, Any] = {}
+
+    def clear_cache(self) -> None:
+        """Drop any cached state to release references to on-disk files."""
+
+        self._state_dict_cache.clear()
+        self._metadata_cache.clear()
 
     def hash(self) -> str:
         return ModelHash(algorithm=self.hash_algo).hash(self.path)
@@ -119,16 +127,133 @@ class ModelOnDisk:
         return state_dict
 
     def resolve_weight_file(self, path: Optional[Path] = None) -> Path:
-        if not path:
-            weight_files = list(self.weight_files())
-            match weight_files:
-                case []:
-                    raise ValueError("No weight files found for this model")
-                case [p]:
-                    return p
-                case ps if len(ps) >= 2:
-                    raise ValueError(
-                        f"Multiple weight files found for this model: {ps}. "
-                        f"Please specify the intended file using the 'path' argument"
-                    )
-        return path
+        if path:
+            return path
+
+        weight_files = list(self.weight_files())
+        if not weight_files:
+            raise ValueError("No weight files found for this model")
+
+        if len(weight_files) == 1:
+            return weight_files[0]
+
+        preferred = self._select_weight_file_from_model_index(weight_files)
+        if preferred:
+            return preferred
+
+        preferred = self._select_preferred_weight_file(weight_files)
+        if preferred:
+            return preferred
+
+        # Fallback to a deterministic selection to preserve previous behaviour of
+        # picking the "first" discovered weight file instead of failing outright.
+        return sorted(weight_files)[0]
+
+    def _select_weight_file_from_model_index(self, weight_files: list[Path]) -> Optional[Path]:
+        """Use the diffusers ``model_index.json`` metadata to pick a primary weight file.
+
+        When a diffusers repository ships multiple weight shards, ``model_index.json``
+        includes a ``weight_map`` describing which tensor lives in which file. The
+        UNet shard typically hosts the majority of the tensors, so we pick the file
+        referenced most often in the weight map. Falling back to heuristics keeps the
+        behaviour predictable when the metadata is missing or unexpected.
+        """
+
+        if not weight_files:
+            return None
+
+        if self.path.is_file():
+            return None
+
+        index_path = self.path / "model_index.json"
+        if not index_path.exists():
+            return None
+
+        try:
+            index_data = json.loads(index_path.read_text())
+        except Exception:
+            return None
+
+        def collect_weight_maps(node: Any, acc: list[dict[str, Any]]) -> None:
+            if isinstance(node, dict):
+                for key in ("weight_map", "_weight_map"):
+                    weight_map = node.get(key)
+                    if isinstance(weight_map, dict):
+                        acc.append(weight_map)
+                for value in node.values():
+                    collect_weight_maps(value, acc)
+            elif isinstance(node, list):
+                for item in node:
+                    collect_weight_maps(item, acc)
+
+        weight_maps: list[dict[str, Any]] = []
+        collect_weight_maps(index_data, weight_maps)
+
+        if not weight_maps:
+            return None
+
+        # Normalise candidates to POSIX relative paths so they match the metadata.
+        candidates: dict[str, Path] = {}
+        for wf in weight_files:
+            try:
+                rel = wf.relative_to(self.path)
+            except ValueError:
+                rel = wf.name
+            candidates[rel.as_posix()] = wf
+
+        frequency = Counter()
+        for weight_map in weight_maps:
+            for rel_path in weight_map.values():
+                if not isinstance(rel_path, str):
+                    continue
+                normalised = Path(rel_path.replace("\\", "/")).as_posix()
+                if normalised in candidates:
+                    frequency[normalised] += 1
+
+        if not frequency:
+            return None
+
+        max_count = max(frequency.values())
+        best = sorted(
+            (candidates[path] for path, count in frequency.items() if count == max_count)
+        )
+        return best[0] if best else None
+
+    @staticmethod
+    def _select_preferred_weight_file(weight_files: list[Path]) -> Optional[Path]:
+        """Choose a reasonable default weight file when multiple are present.
+
+        Historically, the model manager would simply pick one of the discovered
+        weight files. During the refactor to `ModelOnDisk`, this behaviour was
+        replaced with a hard error, which broke models that legitimately ship
+        multiple weight shards (for example diffusers-style FLUX repositories).
+
+        To restore compatibility we attempt to select the most likely primary
+        file based on common naming patterns. The selection intentionally errs
+        on the side of being deterministic rather than perfect – callers that
+        require a specific file can still provide it explicitly via ``path``.
+        """
+
+        if not weight_files:
+            return None
+
+        def score(p: Path) -> tuple[int, str]:
+            normalized = p.as_posix().lower()
+
+            priority = 100
+            if "unet" in normalized and "diffusion_pytorch_model" in normalized:
+                priority = 0
+            elif "diffusion_pytorch_model" in normalized:
+                priority = 1
+            elif normalized.endswith("model.safetensors") or normalized.endswith("model.bin"):
+                priority = 2
+            elif "pytorch_model" in normalized:
+                priority = 3
+            elif "pytorch_lora_weights" in normalized:
+                priority = 4
+            elif "lora" in normalized:
+                priority = 5
+
+            return (priority, normalized)
+
+        return min(weight_files, key=score)
