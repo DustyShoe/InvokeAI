@@ -214,9 +214,7 @@ class ModelOnDisk:
             return None
 
         max_count = max(frequency.values())
-        best = sorted(
-            (candidates[path] for path, count in frequency.items() if count == max_count)
-        )
+        best = sorted((candidates[path] for path, count in frequency.items() if count == max_count))
         return best[0] if best else None
 
     @staticmethod
