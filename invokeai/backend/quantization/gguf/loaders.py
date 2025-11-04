@@ -4,9 +4,9 @@ from pathlib import Path
 import gguf
 import torch
 
+import invokeai.backend.util.logging as logger
 from invokeai.backend.quantization.gguf.ggml_tensor import GGMLTensor
 from invokeai.backend.quantization.gguf.utils import TORCH_COMPATIBLE_QTYPES
-import invokeai.backend.util.logging as logger
 
 
 class WrappedGGUFReader:
