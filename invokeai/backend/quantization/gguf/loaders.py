@@ -3,6 +3,7 @@ from pathlib import Path
 
 import gguf
 import torch
+
 from invokeai.backend.quantization.gguf.ggml_tensor import GGMLTensor
 from invokeai.backend.quantization.gguf.utils import TORCH_COMPATIBLE_QTYPES
 import invokeai.backend.util.logging as logger
