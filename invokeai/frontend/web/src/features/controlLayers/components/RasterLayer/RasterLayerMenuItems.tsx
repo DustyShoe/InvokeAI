@@ -12,6 +12,7 @@ import { CanvasEntityMenuItemsTransform } from 'features/controlLayers/component
 import { RasterLayerMenuItemsAdjustments } from 'features/controlLayers/components/RasterLayer/RasterLayerMenuItemsAdjustments';
 import { RasterLayerMenuItemsConvertToSubMenu } from 'features/controlLayers/components/RasterLayer/RasterLayerMenuItemsConvertToSubMenu';
 import { RasterLayerMenuItemsCopyToSubMenu } from 'features/controlLayers/components/RasterLayer/RasterLayerMenuItemsCopyToSubMenu';
+import { RasterLayerMenuItemsExtractMaskedArea } from 'features/controlLayers/components/RasterLayer/RasterLayerMenuItemsExtractMaskedArea';
 import { memo } from 'react';
 
 export const RasterLayerMenuItems = memo(() => {
@@ -26,6 +27,7 @@ export const RasterLayerMenuItems = memo(() => {
       <CanvasEntityMenuItemsFilter />
       <CanvasEntityMenuItemsSelectObject />
       <RasterLayerMenuItemsAdjustments />
+      <RasterLayerMenuItemsExtractMaskedArea />
       <MenuDivider />
       <CanvasEntityMenuItemsMergeDown />
       <RasterLayerMenuItemsCopyToSubMenu />
