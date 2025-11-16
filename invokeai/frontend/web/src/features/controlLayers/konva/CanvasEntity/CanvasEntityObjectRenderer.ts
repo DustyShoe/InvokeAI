@@ -10,6 +10,7 @@ import { CanvasObjectEraserLine } from 'features/controlLayers/konva/CanvasObjec
 import { CanvasObjectEraserLineWithPressure } from 'features/controlLayers/konva/CanvasObject/CanvasObjectEraserLineWithPressure';
 import { CanvasObjectImage } from 'features/controlLayers/konva/CanvasObject/CanvasObjectImage';
 import { CanvasObjectRect } from 'features/controlLayers/konva/CanvasObject/CanvasObjectRect';
+import { CanvasObjectText } from 'features/controlLayers/konva/CanvasObject/CanvasObjectText';
 import type { AnyObjectRenderer, AnyObjectState } from 'features/controlLayers/konva/CanvasObject/types';
 import { LightnessToAlphaFilter } from 'features/controlLayers/konva/filters';
 import { getPatternSVG } from 'features/controlLayers/konva/patterns/getPatternSVG';
@@ -395,6 +396,15 @@ export class CanvasEntityObjectRenderer extends CanvasModuleBase {
         this.konva.objectGroup.add(renderer.konva.group);
       }
 
+      didRender = renderer.update(objectState, force || isFirstRender);
+    } else if (objectState.type === 'text') {
+      assert(renderer instanceof CanvasObjectText || !renderer);
+
+      if (!renderer) {
+        renderer = new CanvasObjectText(objectState, this);
+        this.renderers.set(renderer.id, renderer);
+        this.konva.objectGroup.add(renderer.konva.group);
+      }
       didRender = renderer.update(objectState, force || isFirstRender);
     } else if (objectState.type === 'image') {
       assert(renderer instanceof CanvasObjectImage || !renderer);

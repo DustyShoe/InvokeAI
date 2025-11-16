@@ -6,6 +6,7 @@ import { CanvasColorPickerToolModule } from 'features/controlLayers/konva/Canvas
 import { CanvasEraserToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasEraserToolModule';
 import { CanvasMoveToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasMoveToolModule';
 import { CanvasRectToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasRectToolModule';
+import { CanvasTextToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasTextToolModule';
 import { CanvasViewToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasViewToolModule';
 import {
   calculateNewBrushSizeFromWheelDelta,
@@ -55,6 +56,7 @@ export class CanvasToolModule extends CanvasModuleBase {
   subscriptions: Set<() => void> = new Set();
 
   config: CanvasToolModuleConfig = DEFAULT_CONFIG;
+  lastTool: Tool = 'move';
 
   tools: {
     brush: CanvasBrushToolModule;
@@ -64,6 +66,7 @@ export class CanvasToolModule extends CanvasModuleBase {
     bbox: CanvasBboxToolModule;
     view: CanvasViewToolModule;
     move: CanvasMoveToolModule;
+    text: CanvasTextToolModule;
   };
 
   /**
@@ -121,6 +124,7 @@ export class CanvasToolModule extends CanvasModuleBase {
       bbox: new CanvasBboxToolModule(this),
       view: new CanvasViewToolModule(this),
       move: new CanvasMoveToolModule(this),
+      text: new CanvasTextToolModule(this),
     };
 
     this.konva = {
@@ -132,13 +136,16 @@ export class CanvasToolModule extends CanvasModuleBase {
     this.konva.group.add(this.tools.eraser.konva.group);
     this.konva.group.add(this.tools.colorPicker.konva.group);
     this.konva.group.add(this.tools.bbox.konva.group);
+    this.konva.group.add(this.tools.text.konva.group);
 
     this.subscriptions.add(this.manager.stage.$stageAttrs.listen(this.render));
     this.subscriptions.add(this.manager.$isBusy.listen(this.render));
     this.subscriptions.add(this.manager.stateApi.createStoreSubscription(selectCanvasSettingsSlice, this.render));
     this.subscriptions.add(this.manager.stateApi.createStoreSubscription(selectCanvasSlice, this.render));
     this.subscriptions.add(
-      this.$tool.listen(() => {
+      this.$tool.listen((tool) => {
+        this.tools.text.onToolChanged(this.lastTool, tool);
+        this.lastTool = tool;
         // On tool switch, reset mouse state
         this.manager.tool.$isPrimaryPointerDown.set(false);
         this.render();
@@ -190,6 +197,8 @@ export class CanvasToolModule extends CanvasModuleBase {
         this.tools.brush.syncCursorStyle();
       } else if (tool === 'eraser') {
         this.tools.eraser.syncCursorStyle();
+      } else if (tool === 'text') {
+        this.tools.text.syncCursorStyle();
       } else if (tool === 'move') {
         this.tools.move.syncCursorStyle();
       } else if (tool === 'rect') {
@@ -209,6 +218,7 @@ export class CanvasToolModule extends CanvasModuleBase {
     this.tools.eraser.render();
     this.tools.colorPicker.render();
     this.tools.bbox.render();
+    this.tools.text.render();
   };
 
   syncCursorPositions = () => {
@@ -345,6 +355,8 @@ export class CanvasToolModule extends CanvasModuleBase {
         await this.tools.brush.onStagePointerEnter(e);
       } else if (tool === 'eraser') {
         await this.tools.eraser.onStagePointerEnter(e);
+      } else if (tool === 'text') {
+        this.tools.text.onStagePointerEnter(e);
       }
     } finally {
       this.render();
@@ -375,6 +387,8 @@ export class CanvasToolModule extends CanvasModuleBase {
         await this.tools.eraser.onStagePointerDown(e);
       } else if (tool === 'rect') {
         await this.tools.rect.onStagePointerDown(e);
+      } else if (tool === 'text') {
+        await this.tools.text.onStagePointerDown(e);
       }
     } finally {
       this.render();
@@ -436,6 +450,8 @@ export class CanvasToolModule extends CanvasModuleBase {
         await this.tools.eraser.onStagePointerMove(e);
       } else if (tool === 'rect') {
         await this.tools.rect.onStagePointerMove(e);
+      } else if (tool === 'text') {
+        await this.tools.text.onStagePointerMove(e);
       } else {
         this.manager.stateApi.getSelectedEntityAdapter()?.bufferRenderer.clearBuffer();
       }
@@ -452,6 +468,8 @@ export class CanvasToolModule extends CanvasModuleBase {
     try {
       this.$lastPointerType.set(e.pointerType);
       this.$cursorPos.set(null);
+
+      this.tools.text.onStagePointerLeave(e);
 
       if (!this.getCanDraw()) {
         return;
@@ -535,6 +553,11 @@ export class CanvasToolModule extends CanvasModuleBase {
 
   onKeyDown = (e: KeyboardEvent) => {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      return;
+    }
+
+    if (this.tools.text.onKeyDown(e)) {
+      this.render();
       return;
     }
 
@@ -632,6 +655,7 @@ export class CanvasToolModule extends CanvasModuleBase {
         bbox: this.tools.bbox.repr(),
         view: this.tools.view.repr(),
         move: this.tools.move.repr(),
+        text: this.tools.text.repr(),
       },
     };
   };
