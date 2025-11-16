@@ -100,7 +100,7 @@ const zIPMethodV2 = z.enum(['full', 'style', 'composition', 'style_strong', 'sty
 export type IPMethodV2 = z.infer<typeof zIPMethodV2>;
 export const isIPMethodV2 = (v: unknown): v is IPMethodV2 => zIPMethodV2.safeParse(v).success;
 
-const _zTool = z.enum(['brush', 'eraser', 'move', 'rect', 'view', 'bbox', 'colorPicker']);
+const _zTool = z.enum(['brush', 'eraser', 'move', 'rect', 'view', 'bbox', 'colorPicker', 'text']);
 export type Tool = z.infer<typeof _zTool>;
 
 const zPoints = z.array(z.number()).refine((points) => points.length % 2 === 0, {
@@ -255,6 +255,29 @@ const zCanvasRectState = z.object({
 });
 export type CanvasRectState = z.infer<typeof zCanvasRectState>;
 
+const TEXT_TOOL_FONT_FAMILIES = ['sans', 'serif', 'mono'] as const;
+export type CanvasTextFontFamily = (typeof TEXT_TOOL_FONT_FAMILIES)[number];
+const zCanvasTextFontFamily = z.enum(TEXT_TOOL_FONT_FAMILIES);
+const zCanvasTextAlign = z.enum(['left', 'center', 'right']);
+export type CanvasTextAlign = z.infer<typeof zCanvasTextAlign>;
+
+const zCanvasTextState = z.object({
+  id: zId,
+  type: z.literal('text'),
+  position: zCoordinate,
+  text: z.string(),
+  fontSize: z.number().min(1),
+  fontFamily: zCanvasTextFontFamily,
+  isBold: z.boolean(),
+  isItalic: z.boolean(),
+  align: zCanvasTextAlign,
+  color: zRgbaColor,
+  width: z.number().min(0),
+  height: z.number().min(0),
+  lineHeight: z.number().positive(),
+});
+export type CanvasTextState = z.infer<typeof zCanvasTextState>;
+
 const zCanvasImageState = z.object({
   id: zId,
   type: z.literal('image'),
@@ -269,6 +292,7 @@ const zCanvasObjectState = z.union([
   zCanvasRectState,
   zCanvasBrushLineWithPressureState,
   zCanvasEraserLineWithPressureState,
+  zCanvasTextState,
 ]);
 export type CanvasObjectState = z.infer<typeof zCanvasObjectState>;
 
@@ -765,6 +789,7 @@ export type EntityEraserLineAddedPayload = EntityIdentifierPayload<{
   eraserLine: CanvasEraserLineState | CanvasEraserLineWithPressureState;
 }>;
 export type EntityRectAddedPayload = EntityIdentifierPayload<{ rect: CanvasRectState }>;
+export type EntityTextAddedPayload = EntityIdentifierPayload<{ text: CanvasTextState }>;
 export type EntityRasterizedPayload = EntityIdentifierPayload<{
   imageObject: CanvasImageState;
   position: Coordinate;

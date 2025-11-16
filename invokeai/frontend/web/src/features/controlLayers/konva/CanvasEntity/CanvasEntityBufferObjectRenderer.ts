@@ -8,6 +8,7 @@ import { CanvasObjectEraserLine } from 'features/controlLayers/konva/CanvasObjec
 import { CanvasObjectEraserLineWithPressure } from 'features/controlLayers/konva/CanvasObject/CanvasObjectEraserLineWithPressure';
 import { CanvasObjectImage } from 'features/controlLayers/konva/CanvasObject/CanvasObjectImage';
 import { CanvasObjectRect } from 'features/controlLayers/konva/CanvasObject/CanvasObjectRect';
+import { CanvasObjectText } from 'features/controlLayers/konva/CanvasObject/CanvasObjectText';
 import type { AnyObjectRenderer, AnyObjectState } from 'features/controlLayers/konva/CanvasObject/types';
 import { getPrefixedId } from 'features/controlLayers/konva/util';
 import Konva from 'konva';
@@ -152,6 +153,15 @@ export class CanvasEntityBufferObjectRenderer extends CanvasModuleBase {
       }
 
       didRender = this.renderer.update(this.state, true);
+    } else if (this.state.type === 'text') {
+      assert(this.renderer instanceof CanvasObjectText || !this.renderer);
+
+      if (!this.renderer) {
+        this.renderer = new CanvasObjectText(this.state, this);
+        this.konva.group.add(this.renderer.konva.group);
+      }
+
+      didRender = this.renderer.update(this.state, true);
     } else if (this.state.type === 'image') {
       assert(this.renderer instanceof CanvasObjectImage || !this.renderer);
 
@@ -236,6 +246,9 @@ export class CanvasEntityBufferObjectRenderer extends CanvasModuleBase {
           break;
         case 'rect':
           this.manager.stateApi.addRect({ entityIdentifier, rect: this.state });
+          break;
+        case 'text':
+          this.manager.stateApi.addText({ entityIdentifier, text: this.state });
           break;
       }
     }
