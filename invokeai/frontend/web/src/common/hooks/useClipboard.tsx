@@ -77,5 +77,23 @@ export const useClipboard = () => {
     [alertClipboardNotAvailable, isAvailable]
   );
 
-  return { isAvailable, writeText, write, writeImage };
+  const readText = useCallback(async () => {
+    if (!isAvailable || !navigator.clipboard?.readText) {
+      alertClipboardNotAvailable();
+      return null;
+    }
+
+    try {
+      return await navigator.clipboard.readText();
+    } catch (error) {
+      toast({
+        id: 'CLIPBOARD_READ_ERROR',
+        title: t('toast.unableToCopy'),
+        status: 'error',
+      });
+      return null;
+    }
+  }, [alertClipboardNotAvailable, isAvailable, t]);
+
+  return { isAvailable, writeText, write, writeImage, readText };
 };

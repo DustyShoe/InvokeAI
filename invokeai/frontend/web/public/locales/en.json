@@ -526,6 +526,11 @@
                 "title": "Eraser Tool",
                 "desc": "Select the eraser tool."
             },
+            "selectTextTool": {
+                "title": "Text Tool",
+                "desc": "Select the text tool.",
+                "key": "y"
+            },
             "selectMoveTool": {
                 "title": "Move Tool",
                 "desc": "Select the move tool."
@@ -2055,6 +2060,21 @@
         "fitBboxToMasks": "Fit Bbox To Masks",
         "removeBookmark": "Remove Bookmark",
         "saveCanvasToGallery": "Save Canvas to Gallery",
+        "textTool": {
+            "label": "Text",
+            "fontSize": "Font Size",
+            "fontFamily": "Font",
+            "fontFamilyOptions": {
+                "sans": "Sans",
+                "serif": "Serif",
+                "mono": "Mono"
+            },
+            "bold": "Bold",
+            "italic": "Italic",
+            "alignLeft": "Align Left",
+            "alignCenter": "Align Center",
+            "alignRight": "Align Right"
+        },
         "saveBboxToGallery": "Save Bbox to Gallery",
         "saveLayerToAssets": "Save Layer to Assets",
         "exportCanvasToPSD": "Export Canvas to PSD",
