@@ -47,6 +47,17 @@ export class CanvasTextToolModule extends CanvasModuleBase {
   $settings = atom<TextToolSettings>(DEFAULT_SETTINGS);
   $editingState = atom<TextEditingState | null>(null);
 
+  private readonly isMacPlatform = (() => {
+    if (typeof navigator === 'undefined') {
+      return false;
+    }
+
+    const uaPlatform = navigator.userAgentData?.platform?.toLowerCase();
+    const legacyPlatform = navigator.platform?.toLowerCase();
+
+    return Boolean(uaPlatform?.includes('mac') || legacyPlatform?.includes('mac'));
+  })();
+
   private measureCtx: CanvasRenderingContext2D;
   private caretInterval: number | null = null;
   private isCaretVisible = true;
@@ -125,7 +136,12 @@ export class CanvasTextToolModule extends CanvasModuleBase {
     this.render();
   };
 
-  onStagePointerDown = (_e: KonvaEventObject<PointerEvent>) => {
+  onStagePointerDown = (e: KonvaEventObject<PointerEvent>) => {
+    if (e.evt.button !== 0) {
+      // Only left clicks start text editing; right/middle clicks keep their existing behaviors.
+      return;
+    }
+
     if (!this.manager.tool.getCanDraw()) {
       return;
     }
@@ -172,6 +188,35 @@ export class CanvasTextToolModule extends CanvasModuleBase {
       e.stopPropagation();
       e.stopImmediatePropagation?.();
     };
+
+    const isPrimaryModifier = this.isPrimaryModifierPressed(e);
+    const key = e.key.toLowerCase();
+
+    if (isPrimaryModifier && !e.shiftKey && !e.altKey) {
+      if (key === 'c') {
+        consumeKeyEvent();
+        this.copyText(editingState.text);
+        return true;
+      }
+
+      if (key === 'v') {
+        consumeKeyEvent();
+        void this.pasteFromClipboard();
+        return true;
+      }
+
+      if (key === 'x') {
+        consumeKeyEvent();
+        this.cutText();
+        return true;
+      }
+
+      if (key === 'y') {
+        consumeKeyEvent();
+        this.redoEditing();
+        return true;
+      }
+    }
 
     if (e.key === 'Escape') {
       consumeKeyEvent();
@@ -402,6 +447,58 @@ export class CanvasTextToolModule extends CanvasModuleBase {
       return -width;
     }
     return 0;
+  };
+
+  private isPrimaryModifierPressed = (e: KeyboardEvent) => {
+    return this.isMacPlatform ? e.metaKey : e.ctrlKey;
+  };
+
+  private copyText = (text: string) => {
+    if (!text || typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+      return;
+    }
+
+    void navigator.clipboard.writeText(text).catch((error) => {
+      this.log.warn({ error }, 'Unable to copy text from text tool');
+    });
+  };
+
+  private pasteFromClipboard = async () => {
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.readText) {
+      return;
+    }
+
+    try {
+      const clipboardText = await navigator.clipboard.readText();
+      if (!clipboardText) {
+        return;
+      }
+
+      const editingState = this.$editingState.get();
+      if (!editingState) {
+        return;
+      }
+
+      this.$editingState.set({ ...editingState, text: `${editingState.text}${clipboardText}` });
+      this.resetCaretBlink();
+    } catch (error) {
+      this.log.warn({ error }, 'Unable to paste text into text tool');
+    }
+  };
+
+  private cutText = () => {
+    const editingState = this.$editingState.get();
+    if (!editingState || !editingState.text) {
+      return;
+    }
+
+    this.copyText(editingState.text);
+    this.$editingState.set({ ...editingState, text: '' });
+    this.resetCaretBlink();
+  };
+
+  private redoEditing = () => {
+    // Placeholder to consume redo hotkeys while editing. In v1, text editing does not track a redo stack.
   };
 
   private appendToEditingState = (value: string) => {
