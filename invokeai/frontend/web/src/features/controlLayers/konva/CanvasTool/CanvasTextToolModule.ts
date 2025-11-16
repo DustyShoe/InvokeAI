@@ -5,7 +5,13 @@ import type { CanvasToolModule } from 'features/controlLayers/konva/CanvasTool/C
 import { TEXT_TOOL_FONT_FAMILY_MAP, TEXT_TOOL_LINE_HEIGHT, getFontStyle } from 'features/controlLayers/konva/text/textToolConstants';
 import { floorCoord, getPrefixedId, offsetCoord } from 'features/controlLayers/konva/util';
 import type { CanvasEntityAdapter } from 'features/controlLayers/konva/CanvasEntity/types';
-import type { CanvasEntityIdentifier, CanvasTextAlign, CanvasTextFontFamily, Coordinate } from 'features/controlLayers/store/types';
+import type {
+  CanvasEntityIdentifier,
+  CanvasTextAlign,
+  CanvasTextFontFamily,
+  Coordinate,
+  RgbaColor,
+} from 'features/controlLayers/store/types';
 import { atom } from 'nanostores';
 import Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
@@ -97,7 +103,7 @@ export class CanvasTextToolModule extends CanvasModuleBase {
         width: caretWidth,
         height: DEFAULT_SETTINGS.fontSize,
         offsetX: caretWidth / 2,
-        fill: rgbaColorToString(this.manager.stateApi.getCurrentColor()),
+        fill: this.getCaretFill(this.manager.stateApi.getCurrentColor()),
         visible: false,
       }),
       editingGroup: new Konva.Group({ name: `${this.type}:editing_group`, listening: false, visible: false }),
@@ -111,7 +117,7 @@ export class CanvasTextToolModule extends CanvasModuleBase {
         listening: false,
         width: caretWidth,
         offsetX: caretWidth / 2,
-        fill: rgbaColorToString(this.manager.stateApi.getCurrentColor()),
+        fill: this.getCaretFill(this.manager.stateApi.getCurrentColor()),
       }),
     };
 
@@ -345,6 +351,7 @@ export class CanvasTextToolModule extends CanvasModuleBase {
 
     const settings = this.$settings.get();
     const color = this.manager.stateApi.getCurrentColor();
+    const caretColor = this.getCaretFill(color);
     const caretWidth = this.manager.stage.unscale(CARET_SCREEN_WIDTH);
 
     this.konva.previewCaret.setAttrs({
@@ -353,7 +360,7 @@ export class CanvasTextToolModule extends CanvasModuleBase {
       height: settings.fontSize,
       width: caretWidth,
       offsetX: caretWidth / 2,
-      fill: rgbaColorToString({ ...color, a: 1 }),
+      fill: caretColor,
       visible: true,
     });
 
@@ -363,6 +370,7 @@ export class CanvasTextToolModule extends CanvasModuleBase {
   private renderEditing = (editingState: TextEditingState) => {
     const settings = this.$settings.get();
     const color = this.manager.stateApi.getCurrentColor();
+    const caretColor = this.getCaretFill(color);
     const fontStyle = getFontStyle(settings);
     const cssFontFamily = TEXT_TOOL_FONT_FAMILY_MAP[settings.fontFamily];
     const metrics = this.measureText(editingState.text, settings);
@@ -398,7 +406,7 @@ export class CanvasTextToolModule extends CanvasModuleBase {
       height: settings.fontSize,
       width: caretWidth,
       offsetX: caretWidth / 2,
-      fill: rgbaColorToString({ ...color, a: 1 }),
+      fill: caretColor,
       visible: this.isCaretVisible,
     });
 
@@ -451,6 +459,14 @@ export class CanvasTextToolModule extends CanvasModuleBase {
 
   private isPrimaryModifierPressed = (e: KeyboardEvent) => {
     return this.isMacPlatform ? e.metaKey : e.ctrlKey;
+  };
+
+  private getCaretFill = (color: RgbaColor) => {
+    // Ensure the caret remains visible against any background by choosing a high-contrast black or white fill
+    const luminance = (0.299 * color.r + 0.587 * color.g + 0.114 * color.b) / 255;
+    const isDark = luminance < 0.5;
+    const caretColor = isDark ? { r: 255, g: 255, b: 255, a: 1 } : { r: 0, g: 0, b: 0, a: 1 };
+    return rgbaColorToString(caretColor);
   };
 
   private copyText = (text: string) => {
