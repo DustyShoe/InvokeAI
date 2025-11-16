@@ -1,11 +1,4 @@
-import {
-  ButtonGroup,
-  CompositeNumberInput,
-  Flex,
-  FormControl,
-  IconButton,
-  Select,
-} from '@invoke-ai/ui-library';
+import { ButtonGroup, CompositeNumberInput, Flex, IconButton, Select } from '@invoke-ai/ui-library';
 import { useCanvasManager } from 'features/controlLayers/contexts/CanvasManagerProviderGate';
 import type { CanvasTextFontFamily } from 'features/controlLayers/store/types';
 import { useStore } from '@nanostores/react';
@@ -59,24 +52,39 @@ export const TextToolOptions = memo(() => {
   }, [canvasManager.tool.tools.text]);
 
   return (
-    <Flex alignItems="center" h="full" gap={3} px={4} flexWrap="wrap" flexGrow={1}>
-      <FormControl minW={24} label={t('fontSize')}>
-        <CompositeNumberInput
-          min={4}
-          max={400}
-          value={settings.fontSize}
-          onChange={onFontSizeChange}
-          defaultValue={DEFAULT_FONT_SIZE}
-        />
-      </FormControl>
-      <FormControl minW={48} label={t('fontFamily')}>
-        <Select value={settings.fontFamily} onChange={onFontFamilyChange} size="md">
-          <option value="sans">{t('fontFamilyOptions.sans')}</option>
-          <option value="serif">{t('fontFamilyOptions.serif')}</option>
-          <option value="mono">{t('fontFamilyOptions.mono')}</option>
-        </Select>
-      </FormControl>
-      <ButtonGroup isAttached>
+    <Flex alignItems="center" h="full" gap={2} px={2} flexWrap="nowrap">
+      <CompositeNumberInput
+        min={4}
+        max={400}
+        value={settings.fontSize}
+        onChange={onFontSizeChange}
+        defaultValue={DEFAULT_FONT_SIZE}
+        aria-label={t('fontSize')}
+        w="80px"
+        minW="80px"
+        maxW="80px"
+        flexShrink={0}
+      />
+      <Select
+        value={settings.fontFamily}
+        onChange={onFontFamilyChange}
+        size="md"
+        aria-label={t('fontFamily')}
+        w="180px"
+        minW="180px"
+        maxW="200px"
+        flexShrink={0}
+        sx={{
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+        }}
+      >
+        <option value="sans">{t('fontFamilyOptions.sans')}</option>
+        <option value="serif">{t('fontFamilyOptions.serif')}</option>
+        <option value="mono">{t('fontFamilyOptions.mono')}</option>
+      </Select>
+      <ButtonGroup isAttached alignSelf="stretch">
         <IconButton
           aria-label={t('bold')}
           icon={<PiTextBBold />}
@@ -92,7 +100,7 @@ export const TextToolOptions = memo(() => {
           onClick={toggleItalic}
         />
       </ButtonGroup>
-      <ButtonGroup isAttached>
+      <ButtonGroup isAttached alignSelf="stretch">
         <IconButton
           aria-label={t('alignLeft')}
           icon={<PiTextAlignLeftBold />}
