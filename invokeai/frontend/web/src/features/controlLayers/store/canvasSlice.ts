@@ -67,6 +67,7 @@ import type {
   EntityMovedToPayload,
   EntityRasterizedPayload,
   EntityRectAddedPayload,
+  EntityTextAddedPayload,
   IPMethodV2,
   T2IAdapterConfig,
 } from './types';
@@ -1482,6 +1483,15 @@ const slice = createSlice({
       // re-render it (reference equality check). I don't like this behaviour.
       entity.objects.push({ ...rect });
     },
+    entityTextAdded: (state, action: PayloadAction<EntityTextAddedPayload>) => {
+      const { entityIdentifier, text } = action.payload;
+      const entity = selectEntity(state, entityIdentifier);
+      if (!entity) {
+        return;
+      }
+
+      entity.objects.push({ ...text });
+    },
     entityDeleted: (state, action: PayloadAction<EntityIdentifierPayload>) => {
       const { entityIdentifier } = action.payload;
 
@@ -1710,6 +1720,7 @@ export const {
   entityBrushLineAdded,
   entityEraserLineAdded,
   entityRectAdded,
+  entityTextAdded,
   // Raster layer adjustments
   rasterLayerAdjustmentsSet,
   rasterLayerAdjustmentsCancel,
@@ -1834,7 +1845,7 @@ export const canvasSliceConfig: SliceConfig<typeof slice> = {
   },
 };
 
-const doNotGroupMatcher = isAnyOf(entityBrushLineAdded, entityEraserLineAdded, entityRectAdded);
+const doNotGroupMatcher = isAnyOf(entityBrushLineAdded, entityEraserLineAdded, entityRectAdded, entityTextAdded);
 
 // Store rapid actions of the same type at most once every x time.
 // See: https://github.com/omnidan/redux-undo/blob/master/examples/throttled-drag/util/undoFilter.js

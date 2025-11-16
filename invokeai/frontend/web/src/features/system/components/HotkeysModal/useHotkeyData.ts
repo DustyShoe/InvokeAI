@@ -63,14 +63,22 @@ export const useHotkeyData = (): HotkeysData => {
       },
     };
 
-    const addHotkey = (category: HotkeyCategory, id: string, keys: string[], isEnabled: boolean = true) => {
+    const addHotkey = (
+      category: HotkeyCategory,
+      id: string,
+      keys: string[],
+      isEnabled: boolean = true,
+      title?: string,
+      desc?: string
+    ) => {
       const hotkeyId = `${category}.${id}`;
       const effectiveKeys = customHotkeys[hotkeyId] ?? keys;
+
       data[category].hotkeys[id] = {
         id,
         category,
-        title: t(`hotkeys.${category}.${id}.title`),
-        desc: t(`hotkeys.${category}.${id}.desc`),
+        title: title ?? t(`hotkeys.${category}.${id}.title`),
+        desc: desc ?? t(`hotkeys.${category}.${id}.desc`),
         hotkeys: effectiveKeys,
         defaultHotkeys: keys,
         platformKeys: formatKeysForPlatform(effectiveKeys, isMacOS),
@@ -105,6 +113,7 @@ export const useHotkeyData = (): HotkeysData => {
     addHotkey('canvas', 'decrementToolWidth', ['[']);
     addHotkey('canvas', 'incrementToolWidth', [']']);
     addHotkey('canvas', 'selectEraserTool', ['e']);
+    addHotkey('canvas', 'selectTextTool', ['y']);
     addHotkey('canvas', 'selectMoveTool', ['v']);
     addHotkey('canvas', 'selectRectTool', ['u']);
     addHotkey('canvas', 'selectViewTool', ['h']);
