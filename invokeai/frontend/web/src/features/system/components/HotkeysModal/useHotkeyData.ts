@@ -105,6 +105,7 @@ export const useHotkeyData = (): HotkeysData => {
     addHotkey('canvas', 'decrementToolWidth', ['[']);
     addHotkey('canvas', 'incrementToolWidth', [']']);
     addHotkey('canvas', 'selectEraserTool', ['e']);
+    addHotkey('canvas', 'selectTextTool', ['y']);
     addHotkey('canvas', 'selectMoveTool', ['v']);
     addHotkey('canvas', 'selectRectTool', ['u']);
     addHotkey('canvas', 'selectViewTool', ['h']);

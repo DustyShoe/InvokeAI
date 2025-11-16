@@ -24,6 +24,7 @@ import {
   entityMovedTo,
   entityRasterized,
   entityRectAdded,
+  entityTextAdded,
   entityReset,
   inpaintMaskAdded,
   rasterLayerAdded,
@@ -45,6 +46,7 @@ import type {
   EntityMovedToPayload,
   EntityRasterizedPayload,
   EntityRectAddedPayload,
+  EntityTextAddedPayload,
   Rect,
   RgbaColor,
 } from 'features/controlLayers/store/types';
@@ -171,6 +173,13 @@ export class CanvasStateApiModule extends CanvasModuleBase {
    */
   addRect = (arg: EntityRectAddedPayload) => {
     this.store.dispatch(entityRectAdded(arg));
+  };
+
+  /**
+   * Adds text to an entity, pushing state to redux.
+   */
+  addText = (arg: EntityTextAddedPayload) => {
+    this.store.dispatch(entityTextAdded(arg));
   };
 
   /**
