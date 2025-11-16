@@ -12,6 +12,7 @@ import type {
   Coordinate,
   RgbaColor,
 } from 'features/controlLayers/store/types';
+import { isMacOS } from 'features/system/utils/platform';
 import { atom } from 'nanostores';
 import Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
@@ -59,16 +60,7 @@ export class CanvasTextToolModule extends CanvasModuleBase {
   $editingState = atom<TextEditingState | null>(null);
   clipboardHandlers: ClipboardHandlers | null = null;
 
-  private readonly isMacPlatform = (() => {
-    if (typeof navigator === 'undefined') {
-      return false;
-    }
-
-    const uaPlatform = navigator.userAgentData?.platform?.toLowerCase();
-    const legacyPlatform = navigator.platform?.toLowerCase();
-
-    return Boolean(uaPlatform?.includes('mac') || legacyPlatform?.includes('mac'));
-  })();
+  private readonly isMacPlatform = isMacOS;
 
   private measureCtx: CanvasRenderingContext2D;
   private caretInterval: number | null = null;

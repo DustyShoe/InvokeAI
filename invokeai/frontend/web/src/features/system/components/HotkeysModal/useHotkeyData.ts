@@ -1,3 +1,4 @@
+import { detectIsMacOS } from 'features/system/utils/platform';
 import { useMemo } from 'react';
 import { type HotkeyCallback, type Options, useHotkeys } from 'react-hotkeys-hook';
 import { useTranslation } from 'react-i18next';
@@ -31,9 +32,7 @@ const formatKeysForPlatform = (keys: string[], isMacOS: boolean): string[][] => 
 
 export const useHotkeyData = (): HotkeysData => {
   const { t } = useTranslation();
-  const isMacOS = useMemo(() => {
-    return navigator.userAgent.toLowerCase().includes('mac');
-  }, []);
+  const isMacOS = useMemo(() => detectIsMacOS(), []);
 
   const hotkeysData = useMemo<HotkeysData>(() => {
     const data: HotkeysData = {
