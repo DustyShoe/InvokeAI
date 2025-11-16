@@ -255,7 +255,7 @@ const zCanvasRectState = z.object({
 });
 export type CanvasRectState = z.infer<typeof zCanvasRectState>;
 
-export const TEXT_TOOL_FONT_FAMILIES = ['sans', 'serif', 'mono'] as const;
+const TEXT_TOOL_FONT_FAMILIES = ['sans', 'serif', 'mono'] as const;
 export type CanvasTextFontFamily = (typeof TEXT_TOOL_FONT_FAMILIES)[number];
 const zCanvasTextFontFamily = z.enum(TEXT_TOOL_FONT_FAMILIES);
 const zCanvasTextAlign = z.enum(['left', 'center', 'right']);

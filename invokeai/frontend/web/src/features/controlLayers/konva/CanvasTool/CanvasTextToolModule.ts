@@ -14,7 +14,7 @@ import type { Logger } from 'roarr';
 const CARET_BLINK_MS = 500;
 const CARET_SCREEN_WIDTH = 1.5; // px on screen
 
-export type TextToolSettings = {
+type TextToolSettings = {
   fontSize: number;
   fontFamily: CanvasTextFontFamily;
   isBold: boolean;
@@ -125,7 +125,7 @@ export class CanvasTextToolModule extends CanvasModuleBase {
     this.render();
   };
 
-  onStagePointerDown = async (_e: KonvaEventObject<PointerEvent>) => {
+  onStagePointerDown = (_e: KonvaEventObject<PointerEvent>) => {
     if (!this.manager.tool.getCanDraw()) {
       return;
     }
@@ -152,7 +152,7 @@ export class CanvasTextToolModule extends CanvasModuleBase {
     if (!this.$editingState.get()) {
       this.konva.previewCaret.visible(false);
       this.konva.editingGroup.visible(false);
-      this.manager.stage.batchDraw();
+      this.manager.konva.previewLayer.batchDraw();
     }
   };
 
@@ -253,7 +253,7 @@ export class CanvasTextToolModule extends CanvasModuleBase {
       this.renderPreview();
     }
 
-    this.manager.stage.batchDraw();
+    this.manager.konva.previewLayer.batchDraw();
   };
 
   private hideAll = () => {
@@ -452,7 +452,7 @@ export class CanvasTextToolModule extends CanvasModuleBase {
     this.caretInterval = window.setInterval(() => {
       this.isCaretVisible = !this.isCaretVisible;
       this.konva.editingCaret.visible(this.isCaretVisible);
-      this.manager.stage.batchDraw();
+      this.manager.konva.previewLayer.batchDraw();
     }, CARET_BLINK_MS);
   };
 

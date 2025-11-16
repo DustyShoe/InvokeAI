@@ -17,7 +17,7 @@ import {
   PiTextAlignCenterBold,
   PiTextAlignLeftBold,
   PiTextAlignRightBold,
-  PiTextBolder,
+  PiTextBBold,
   PiTextItalicBold,
 } from 'react-icons/pi';
 
@@ -29,8 +29,8 @@ export const TextToolOptions = memo(() => {
   const { t } = useTranslation('translation', { keyPrefix: 'controlLayers.textTool' });
 
   const onFontSizeChange = useCallback(
-    (_valueAsString: string, valueAsNumber: number) => {
-      const fontSize = clamp(Math.round(valueAsNumber || settings.fontSize), 4, 400);
+    (value: number) => {
+      const fontSize = clamp(Math.round(value || settings.fontSize), 4, 400);
       canvasManager.tool.tools.text.setFontSize(fontSize);
     },
     [canvasManager.tool.tools.text, settings.fontSize]
@@ -79,7 +79,7 @@ export const TextToolOptions = memo(() => {
       <ButtonGroup isAttached>
         <IconButton
           aria-label={t('bold')}
-          icon={<PiTextBolder />}
+          icon={<PiTextBBold />}
           variant={settings.isBold ? 'solid' : 'outline'}
           colorScheme={settings.isBold ? 'invokeBlue' : 'base'}
           onClick={toggleBold}
