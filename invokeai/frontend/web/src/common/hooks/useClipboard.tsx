@@ -85,7 +85,7 @@ export const useClipboard = () => {
 
     try {
       return await navigator.clipboard.readText();
-    } catch (error) {
+    } catch (_error) {
       toast({
         id: 'CLIPBOARD_READ_ERROR',
         title: t('toast.unableToCopy'),

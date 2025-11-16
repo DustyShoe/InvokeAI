@@ -22,6 +22,7 @@ export const TextToolOptions = memo(() => {
   const settings = useStore(canvasManager.tool.tools.text.$settings);
   const { t } = useTranslation('translation', { keyPrefix: 'controlLayers.textTool' });
   const clipboard = useClipboard();
+  const { readText, writeText } = clipboard;
 
   const onFontSizeChange = useCallback(
     (value: number) => {
@@ -55,14 +56,20 @@ export const TextToolOptions = memo(() => {
 
   useEffect(() => {
     canvasManager.tool.tools.text.setClipboardHandlers({
-      writeText: clipboard.writeText,
-      readText: async () => clipboard.readText?.() ?? null,
+      writeText,
+      readText: async () => {
+        if (!readText) {
+          return null;
+        }
+
+        return await readText();
+      },
     });
 
     return () => {
       canvasManager.tool.tools.text.clearClipboardHandlers();
     };
-  }, [canvasManager.tool.tools.text, clipboard.readText, clipboard.writeText]);
+  }, [canvasManager.tool.tools.text, readText, writeText]);
 
   return (
     <Flex alignItems="center" h="full" gap={2} px={2} flexWrap="nowrap">
