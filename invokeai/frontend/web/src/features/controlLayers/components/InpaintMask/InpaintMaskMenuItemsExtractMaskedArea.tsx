@@ -8,6 +8,7 @@ import type { CanvasImageState, Rect } from 'features/controlLayers/store/types'
 import { memo, useCallback } from 'react';
 import { PiSelectionBackgroundBold } from 'react-icons/pi';
 import { serializeError } from 'serialize-error';
+import { useTranslation } from 'react-i18next';
 
 import { toast } from 'features/toast/toast';
 
@@ -17,6 +18,7 @@ export const InpaintMaskMenuItemsExtractMaskedArea = memo(() => {
   const canvasManager = useCanvasManager();
   const entityIdentifier = useEntityIdentifierContext('inpaint_mask');
   const isBusy = useCanvasIsBusy();
+  const { t } = useTranslation();
 
   const onExtract = useCallback(() => {
     // The active inpaint mask layer is required to build the mask used for extraction.
@@ -28,13 +30,13 @@ export const InpaintMaskMenuItemsExtractMaskedArea = memo(() => {
     }
 
     try {
-      // Get the canvas bounding box so the raster extraction respects the visible canvas bounds.
-      const bbox = canvasManager.stateApi.getBbox();
+      // Use the full stage dimensions so the mask extraction covers the entire canvas.
+      const { width, height } = canvasManager.stage.getSize();
       const rect: Rect = {
-        x: Math.floor(bbox.rect.x),
-        y: Math.floor(bbox.rect.y),
-        width: Math.floor(bbox.rect.width),
-        height: Math.floor(bbox.rect.height),
+        x: 0,
+        y: 0,
+        width: Math.floor(width),
+        height: Math.floor(height),
       };
 
       // Abort when the canvas is effectively empty—no pixels to extract.
@@ -142,7 +144,7 @@ export const InpaintMaskMenuItemsExtractMaskedArea = memo(() => {
       icon={<PiSelectionBackgroundBold />}
       isDisabled={isBusy}
     >
-      Extract masked area to new layer
+      {t('controlLayers.extractRegion')}
     </MenuItem>
   );
 });
