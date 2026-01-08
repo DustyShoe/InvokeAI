@@ -6,7 +6,7 @@ import { TransformFitToBboxButtons } from 'features/controlLayers/components/Tra
 import { useCanvasManager } from 'features/controlLayers/contexts/CanvasManagerProviderGate';
 import type { CanvasEntityAdapter } from 'features/controlLayers/konva/CanvasEntity/types';
 import { useRegisteredHotkeys } from 'features/system/components/HotkeysModal/useHotkeyData';
-import { memo, useRef } from 'react';
+import { memo, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const TransformContent = memo(({ adapter }: { adapter: CanvasEntityAdapter }) => {
@@ -16,6 +16,12 @@ const TransformContent = memo(({ adapter }: { adapter: CanvasEntityAdapter }) =>
   const isCanvasFocused = useIsRegionFocused('canvas');
   const isProcessing = useStore(adapter.transformer.$isProcessing);
   const silentTransform = useStore(adapter.transformer.$silentTransform);
+  const setWarpMode = useCallback(() => {
+    adapter.transformer.setTransformMode('warp');
+  }, [adapter.transformer]);
+  const setAffineMode = useCallback(() => {
+    adapter.transformer.setTransformMode('affine');
+  }, [adapter.transformer]);
   const transformMode = useStore(adapter.transformer.$transformMode);
 
   useRegisteredHotkeys({
@@ -61,15 +67,11 @@ const TransformContent = memo(({ adapter }: { adapter: CanvasEntityAdapter }) =>
       </Flex>
 
       <ButtonGroup isAttached size="sm" w="full">
-        <Button
-          onClick={() => adapter.transformer.setTransformMode('warp')}
-          isDisabled={isProcessing}
-          variant={transformMode === 'warp' ? 'solid' : 'ghost'}
-        >
+        <Button onClick={setWarpMode} isDisabled={isProcessing} variant={transformMode === 'warp' ? 'solid' : 'ghost'}>
           {t('controlLayers.transform.modeWarp')}
         </Button>
         <Button
-          onClick={() => adapter.transformer.setTransformMode('affine')}
+          onClick={setAffineMode}
           isDisabled={isProcessing}
           variant={transformMode === 'affine' ? 'solid' : 'ghost'}
         >

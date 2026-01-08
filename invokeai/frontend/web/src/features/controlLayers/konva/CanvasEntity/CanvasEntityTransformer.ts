@@ -215,6 +215,8 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
   warpSourceCanvas: HTMLCanvasElement | null = null;
   warpSourceRect: Rect | null = null;
   warpCorners: WarpCorners | null = null;
+  warpDragStartPointer: Coordinate | null = null;
+  warpDragStartCorners: WarpCorners | null = null;
   constructor(parent: CanvasEntityTransformer['parent']) {
     super();
     this.id = getPrefixedId(this.type);
@@ -333,7 +335,8 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
       this.manager.stage.setCursor('default');
     });
 
-    this.konva.warpDragArea.on('dragstart', () => undefined);
+    this.konva.warpDragArea.dragBoundFunc(() => ({ x: 0, y: 0 }));
+    this.konva.warpDragArea.on('dragstart', this.onWarpDragStart);
     this.konva.warpDragArea.on('dragmove', this.onWarpDragMove);
     this.konva.warpDragArea.on('dragend', this.onWarpDragEnd);
 
@@ -451,12 +454,29 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     if (current === mode) {
       return;
     }
+    if (
+      this.$isTransforming.get() &&
+      current === 'warp' &&
+      mode === 'affine' &&
+      this.warpCorners &&
+      this.warpSourceCanvas
+    ) {
+      this.$transformMode.set(mode);
+      void this.applyWarpTransform().then(() => {
+        this.requestRectCalculation();
+        this.teardownWarpPreview();
+        this.syncInteractionState();
+      });
+      return;
+    }
+
     this.$transformMode.set(mode);
     if (this.$isTransforming.get()) {
       if (mode === 'warp') {
         this.prepareWarpPreview();
       } else if (current === 'warp') {
         this.teardownWarpPreview();
+        this.resetProxyRectToPixelRect();
       }
     }
     this.syncInteractionState();
@@ -472,34 +492,67 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     if (!key || !(key in this.warpCorners)) {
       return;
     }
-    const snapped = this.snapWarpAnchor(anchorNode.position());
+    const localPos = anchorNode.position();
+    const snapped = this.snapWarpAnchor(localPos);
     this.warpCorners = { ...this.warpCorners, [key]: snapped };
+    anchorNode.position(snapped);
+    this.updateWarpBBoxFromCorners();
     this.updateWarpNodes();
   };
 
   onWarpAnchorDragEnd = () => undefined;
 
-  onWarpDragMove = (e: Konva.KonvaEventObject<DragEvent>) => {
+  getStagePointer = (): Coordinate | null => {
+    const stage = (this.manager.stage as { konva?: { stage?: Konva.Stage } }).konva?.stage;
+    const p = stage?.getPointerPosition?.();
+    return p ? { x: p.x, y: p.y } : null;
+  };
+
+  onWarpDragStart = () => {
     if (!this.warpCorners) {
       return;
     }
-    const dragArea = e.target as Konva.Line;
-    const { x, y } = dragArea.position();
-    if (x === 0 && y === 0) {
+    const p = this.getStagePointer();
+    if (!p) {
       return;
     }
-    this.warpCorners = {
-      tl: { x: this.warpCorners.tl.x + x, y: this.warpCorners.tl.y + y },
-      tr: { x: this.warpCorners.tr.x + x, y: this.warpCorners.tr.y + y },
-      br: { x: this.warpCorners.br.x + x, y: this.warpCorners.br.y + y },
-      bl: { x: this.warpCorners.bl.x + x, y: this.warpCorners.bl.y + y },
+
+    this.warpDragStartPointer = p;
+    this.warpDragStartCorners = {
+      tl: { ...this.warpCorners.tl },
+      tr: { ...this.warpCorners.tr },
+      br: { ...this.warpCorners.br },
+      bl: { ...this.warpCorners.bl },
     };
-    dragArea.position({ x: 0, y: 0 });
+  };
+
+  onWarpDragMove = () => {
+    if (!this.warpDragStartPointer || !this.warpDragStartCorners) {
+      return;
+    }
+    const p = this.getStagePointer();
+    if (!p) {
+      return;
+    }
+
+    const dx = p.x - this.warpDragStartPointer.x;
+    const dy = p.y - this.warpDragStartPointer.y;
+
+    const s = this.warpDragStartCorners;
+    this.warpCorners = {
+      tl: { x: s.tl.x + dx, y: s.tl.y + dy },
+      tr: { x: s.tr.x + dx, y: s.tr.y + dy },
+      br: { x: s.br.x + dx, y: s.br.y + dy },
+      bl: { x: s.bl.x + dx, y: s.bl.y + dy },
+    };
+
+    this.updateWarpBBoxFromCorners();
     this.updateWarpNodes();
   };
 
   onWarpDragEnd = () => {
-    this.konva.warpDragArea.position({ x: 0, y: 0 });
+    this.warpDragStartPointer = null;
+    this.warpDragStartCorners = null;
   };
 
   snapWarpAnchor = (pos: Coordinate): Coordinate => {
@@ -507,15 +560,9 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     if (gridSize <= 1) {
       return pos;
     }
-    const stageScale = this.manager.stage.getScale();
-    const stagePos = this.manager.stage.getPosition();
-    const targetX = roundToMultiple(pos.x / stageScale, gridSize);
-    const targetY = roundToMultiple(pos.y / stageScale, gridSize);
-    const scaledOffsetX = stagePos.x % (stageScale * gridSize);
-    const scaledOffsetY = stagePos.y % (stageScale * gridSize);
     return {
-      x: targetX * stageScale + scaledOffsetX,
-      y: targetY * stageScale + scaledOffsetY,
+      x: roundToMultiple(pos.x, gridSize),
+      y: roundToMultiple(pos.y, gridSize),
     };
   };
 
@@ -532,6 +579,44 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     this.konva.warpAnchors.br.position(br);
     this.konva.warpAnchors.bl.position(bl);
     this.konva.warpPreview.getLayer()?.batchDraw();
+  };
+
+  updateWarpBBoxFromCorners = () => {
+    if (!this.warpCorners) {
+      return;
+    }
+    const { tl, tr, br, bl } = this.warpCorners;
+    const minX = Math.min(tl.x, tr.x, br.x, bl.x);
+    const maxX = Math.max(tl.x, tr.x, br.x, bl.x);
+    const minY = Math.min(tl.y, tr.y, br.y, bl.y);
+    const maxY = Math.max(tl.y, tr.y, br.y, bl.y);
+    const width = Math.max(1, maxX - minX);
+    const height = Math.max(1, maxY - minY);
+
+    const onePixel = this.manager.stage.unscale(1);
+    const bboxPadding = this.manager.stage.unscale(this.config.OUTLINE_PADDING);
+
+    this.konva.proxyRect.setAttrs({
+      x: minX,
+      y: minY,
+      width,
+      height,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+    });
+    this.konva.outlineRect.setAttrs({
+      x: minX - bboxPadding,
+      y: minY - bboxPadding,
+      width: width + bboxPadding * 2,
+      height: height + bboxPadding * 2,
+      strokeWidth: onePixel,
+    });
+  };
+
+  resetProxyRectToPixelRect = () => {
+    const pixelRect = this.$pixelRect.get();
+    this.update(this.parent.state.position, pixelRect);
   };
 
   drawWarpPreview = (context: Konva.Context, shape: Konva.Shape) => {
@@ -1144,20 +1229,14 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     if (!this.$isTransforming.get()) {
       return;
     }
-    const rect = this.getRelativeRect();
+    const rect = this.konva.proxyRect.getClientRect({ relativeTo: this.parent.konva.layer });
     if (rect.width === 0 || rect.height === 0) {
       return;
     }
     const canvas = this.parent.renderer.getCanvas({ rect: roundRect(rect), attrs: { opacity: 1, filters: [] } });
     this.warpSourceCanvas = canvas;
     this.warpSourceRect = rect;
-    this.warpCorners = {
-      tl: { x: rect.x, y: rect.y },
-      tr: { x: rect.x + rect.width, y: rect.y },
-      br: { x: rect.x + rect.width, y: rect.y + rect.height },
-      bl: { x: rect.x, y: rect.y + rect.height },
-    };
-    this.parent.renderer.hideObjects();
+    this.warpCorners = this.getProxyRectCorners();
     this.konva.warpGroup.visible(true);
     this.konva.warpGroup.listening(true);
     this.konva.warpDragArea.listening(true);
@@ -1166,6 +1245,28 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     }
     this.syncWarpScale();
     this.updateWarpNodes();
+  };
+
+  getRelativePixelRect = (): Rect => {
+    const pixelRect = this.$pixelRect.get();
+    const position = this.parent.state.position;
+    return {
+      x: position.x + pixelRect.x,
+      y: position.y + pixelRect.y,
+      width: pixelRect.width,
+      height: pixelRect.height,
+    };
+  };
+
+  getProxyRectCorners = (): WarpCorners => {
+    const transform = this.konva.proxyRect.getTransform();
+    const width = this.konva.proxyRect.width();
+    const height = this.konva.proxyRect.height();
+    const tl = transform.point({ x: 0, y: 0 });
+    const tr = transform.point({ x: width, y: 0 });
+    const br = transform.point({ x: width, y: height });
+    const bl = transform.point({ x: 0, y: height });
+    return { tl, tr, br, bl };
   };
 
   teardownWarpPreview = () => {
@@ -1185,6 +1286,7 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
 
   applyWarpTransform = async (): Promise<ImageDTO> => {
     assert(this.warpSourceCanvas && this.warpCorners, 'Missing warp source');
+    this.updateWarpBBoxFromCorners();
     const warped = this.getWarpedCanvas();
     const blob = await canvasToBlob(warped.canvas);
     const imageDTO = await uploadImage({
@@ -1314,24 +1416,26 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     // If the bbox has no width or height, that means the layer is fully transparent. This can happen if it is only
     // eraser lines, fully clipped brush lines or if it has been fully erased.
     if (pixelRect.width === 0 || pixelRect.height === 0) {
-      // If the layer already has no objects, we don't need to reset the entity state. This would cause a push to the
-      // undo stack and clear the redo stack.
-      if (this.parent.renderer.hasObjects()) {
-        this.manager.stateApi.resetEntity({ entityIdentifier: this.parent.entityIdentifier });
-        this.syncInteractionState();
+      // During transform/processing, bbox can temporarily fail. Do not reset entity state in that case.
+      if (!this.$isTransforming.get() && !this.$isProcessing.get()) {
+        if (this.parent.renderer.hasObjects()) {
+          this.manager.stateApi.resetEntity({ entityIdentifier: this.parent.entityIdentifier });
+        }
       }
-    } else {
       this.syncInteractionState();
-      this.update(this.parent.state.position, pixelRect);
-      const groupAttrs: Partial<GroupConfig> = {
-        x: this.parent.state.position.x + pixelRect.x,
-        y: this.parent.state.position.y + pixelRect.y,
-        offsetX: pixelRect.x,
-        offsetY: pixelRect.y,
-      };
-      this.parent.renderer.konva.objectGroup.setAttrs(groupAttrs);
-      this.parent.bufferRenderer.konva.group.setAttrs(groupAttrs);
+      return;
     }
+
+    this.syncInteractionState();
+    this.update(this.parent.state.position, pixelRect);
+    const groupAttrs: Partial<GroupConfig> = {
+      x: this.parent.state.position.x + pixelRect.x,
+      y: this.parent.state.position.y + pixelRect.y,
+      offsetX: pixelRect.x,
+      offsetY: pixelRect.y,
+    };
+    this.parent.renderer.konva.objectGroup.setAttrs(groupAttrs);
+    this.parent.bufferRenderer.konva.group.setAttrs(groupAttrs);
 
     CanvasEntityTransformer.runBboxUpdatedCallbacks(this.parent);
   };
@@ -1390,8 +1494,15 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
             height: maxY - minY,
           });
         } else {
-          this.$nodeRect.set(getEmptyRect());
-          this.$pixelRect.set(getEmptyRect());
+          // Worker may fail due to blank cache/canvas. Fallback to node rect so we don't treat the layer as empty.
+          const fallback = {
+            x: Math.round(rect.x),
+            y: Math.round(rect.y),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+          };
+          this.$nodeRect.set({ ...rect });
+          this.$pixelRect.set(fallback);
         }
         this.log.trace(
           { nodeRect: this.$nodeRect.get(), pixelRect: this.$pixelRect.get(), extents },
