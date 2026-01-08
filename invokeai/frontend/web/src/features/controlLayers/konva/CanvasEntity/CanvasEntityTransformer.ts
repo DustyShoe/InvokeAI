@@ -7,6 +7,7 @@ import type { CanvasManager } from 'features/controlLayers/konva/CanvasManager';
 import { CanvasModuleBase } from 'features/controlLayers/konva/CanvasModuleBase';
 import {
   areStageAttrsGonnaExplode,
+  canvasToBlob,
   canvasToImageData,
   getEmptyRect,
   getKonvaNodeDebugAttrs,
@@ -14,14 +15,18 @@ import {
   offsetCoord,
   roundRect,
 } from 'features/controlLayers/konva/util';
+import type { TransformSmoothingMode } from 'features/controlLayers/store/canvasSettingsSlice';
 import { selectSelectedEntityIdentifier } from 'features/controlLayers/store/selectors';
 import type { Coordinate, LifecycleCallback, Rect, RectWithRotation } from 'features/controlLayers/store/types';
+import { imageDTOToImageObject } from 'features/controlLayers/store/util';
+import { Graph } from 'features/nodes/util/graph/generation/Graph';
 import { toast } from 'features/toast/toast';
 import Konva from 'konva';
 import type { GroupConfig } from 'konva/lib/Group';
 import { atom } from 'nanostores';
 import type { Logger } from 'roarr';
 import { serializeError } from 'serialize-error';
+import { uploadImage } from 'services/api/endpoints/images';
 import type { ImageDTO } from 'services/api/types';
 import { assert } from 'tsafe';
 
@@ -101,6 +106,8 @@ const DEFAULT_CONFIG: CanvasEntityTransformerConfig = {
   ROTATE_ANCHOR_STROKE_COLOR: 'hsl(200 76% 40% / 1)', // invokeBlue.700
   ROTATE_ANCHOR_SIZE: 12,
 };
+
+const TRANSFORM_SMOOTHING_PIXEL_RATIO = 2;
 
 export class CanvasEntityTransformer extends CanvasModuleBase {
   readonly type = 'entity_transformer';
@@ -220,6 +227,7 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
   warpSideDragStartPointer: Coordinate | null = null;
   warpSideDragStartCorners: WarpCorners | null = null;
   warpSideDragKey: WarpSide | null = null;
+  warpPreviewRafId: number | null = null;
   affineSnapshot:
     | {
         proxyRect: {
@@ -743,9 +751,19 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     this.konva.warpSideAnchors.mr.position({ x: (tr.x + br.x) / 2, y: (tr.y + br.y) / 2 });
     this.konva.warpSideAnchors.bm.position({ x: (br.x + bl.x) / 2, y: (br.y + bl.y) / 2 });
     this.konva.warpSideAnchors.ml.position({ x: (bl.x + tl.x) / 2, y: (bl.y + tl.y) / 2 });
-    this.updateWarpPreviewImage();
+    this.scheduleWarpPreviewUpdate();
     this.konva.warpPreview.getLayer()?.batchDraw();
     this.konva.warpPreview.draw();
+  };
+
+  scheduleWarpPreviewUpdate = () => {
+    if (this.warpPreviewRafId !== null) {
+      return;
+    }
+    this.warpPreviewRafId = window.requestAnimationFrame(() => {
+      this.warpPreviewRafId = null;
+      this.updateWarpPreviewImage();
+    });
   };
 
   updateWarpPreviewImage = () => {
@@ -848,7 +866,17 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
   };
 
   isValidHomography = (h: number[]): boolean => {
-    return h.length === 8 && h.every((value) => Number.isFinite(value));
+    if (h.length !== 8) {
+      return false;
+    }
+    let sum = 0;
+    for (const value of h) {
+      if (!Number.isFinite(value)) {
+        return false;
+      }
+      sum += Math.abs(value);
+    }
+    return sum > 1e-6;
   };
 
   getWarpSegments = (width: number, height: number, quality: 'preview' | 'final'): number => {
@@ -1455,22 +1483,99 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
       }
     } else {
       this._setInteractionMode('off');
+      const { transformSmoothingEnabled, transformSmoothingMode } = this.manager.stateApi.getSettings();
       const rect = this.getRelativeRect();
-      const rasterizeResult = await withResultAsync(() =>
-        this.parent.renderer.rasterize({
-          rect: roundRect(rect),
-          replaceObjects: true,
-          ignoreCache: true,
-          attrs: { opacity: 1, filters: [] },
-        })
-      );
-      if (rasterizeResult.isErr()) {
-        toast({ status: 'error', title: 'Failed to apply transform' });
-        this.log.error({ error: serializeError(rasterizeResult.error) }, 'Failed to rasterize entity');
+      if (!transformSmoothingEnabled) {
+        const rasterizeResult = await withResultAsync(() =>
+          this.parent.renderer.rasterize({
+            rect: roundRect(rect),
+            replaceObjects: true,
+            ignoreCache: true,
+            attrs: { opacity: 1, filters: [] },
+          })
+        );
+        if (rasterizeResult.isErr()) {
+          toast({ status: 'error', title: 'Failed to apply transform' });
+          this.log.error({ error: serializeError(rasterizeResult.error) }, 'Failed to rasterize entity');
+        }
+      } else {
+        const rasterizeResult = await withResultAsync(async () => {
+          const blob = await this.parent.renderer.getBlob({
+            rect,
+            attrs: { opacity: 1, filters: [] },
+            imageSmoothingEnabled: true,
+            pixelRatio: TRANSFORM_SMOOTHING_PIXEL_RATIO,
+            cache: {
+              imageSmoothingEnabled: true,
+              pixelRatio: TRANSFORM_SMOOTHING_PIXEL_RATIO,
+            },
+          });
+
+          return await uploadImage({
+            file: new File([blob], `${this.parent.id}_transform.png`, { type: 'image/png' }),
+            image_category: 'other',
+            is_intermediate: true,
+            silent: true,
+          });
+        });
+
+        if (rasterizeResult.isErr()) {
+          toast({ status: 'error', title: 'Failed to apply transform' });
+          this.log.error({ error: serializeError(rasterizeResult.error) }, 'Failed to rasterize entity');
+        } else {
+          const resizeResult = await withResultAsync(() =>
+            this.manager.stateApi.runGraphAndReturnImageOutput({
+              ...CanvasEntityTransformer.buildTransformSmoothingGraph(
+                rasterizeResult.value,
+                rect,
+                transformSmoothingMode
+              ),
+              options: {
+                prepend: true,
+              },
+            })
+          );
+
+          if (resizeResult.isErr()) {
+            toast({ status: 'error', title: 'Failed to apply transform' });
+            this.log.error({ error: serializeError(resizeResult.error) }, 'Failed to smooth transformed entity');
+          } else {
+            const imageObject = imageDTOToImageObject(resizeResult.value);
+            await this.parent.bufferRenderer.setBuffer(imageObject);
+            this.parent.bufferRenderer.commitBuffer({ pushToState: false });
+            this.manager.stateApi.rasterizeEntity({
+              entityIdentifier: this.parent.entityIdentifier,
+              imageObject,
+              position: {
+                x: rect.x,
+                y: rect.y,
+              },
+              replaceObjects: true,
+            });
+          }
+        }
       }
     }
     this.requestRectCalculation();
     this.stopTransform();
+  };
+
+  private static buildTransformSmoothingGraph = (
+    imageDTO: ImageDTO,
+    rect: Rect,
+    resampleMode: TransformSmoothingMode
+  ): { graph: Graph; outputNodeId: string } => {
+    const graph = new Graph(getPrefixedId('transform_smoothing'));
+    const outputNodeId = getPrefixedId('transform_smoothing_resize');
+    graph.addNode({
+      id: outputNodeId,
+      type: 'img_resize',
+      image: { image_name: imageDTO.image_name },
+      width: Math.max(1, Math.round(rect.width)),
+      height: Math.max(1, Math.round(rect.height)),
+      resample_mode: resampleMode,
+    });
+    return { graph, outputNodeId };
   };
 
   resetTransform = () => {
@@ -1593,6 +1698,10 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     }
     this.warpSourceRect = null;
     this.warpCorners = null;
+    if (this.warpPreviewRafId !== null) {
+      window.cancelAnimationFrame(this.warpPreviewRafId);
+      this.warpPreviewRafId = null;
+    }
     this.konva.warpGroup.visible(false);
     this.konva.warpGroup.listening(false);
     this.konva.warpDragArea.listening(false);
@@ -1609,15 +1718,70 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     assert(this.warpSourceCanvas && this.warpCorners, 'Missing warp source');
     this.updateWarpBBoxFromCorners();
     const warped = this.getWarpedCanvas({ quality: 'final' });
-    const imageDTO = await this.parent.renderer.rasterizeCanvas({
-      canvas: warped.canvas,
-      rect: warped.rect,
+    const { transformSmoothingEnabled, transformSmoothingMode } = this.manager.stateApi.getSettings();
+    if (!transformSmoothingEnabled) {
+      const imageDTO = await this.parent.renderer.rasterizeCanvas({
+        canvas: warped.canvas,
+        rect: warped.rect,
+        replaceObjects: true,
+      });
+      await this.manager.stateApi.waitForRasterizationToFinish();
+      await this.parent.syncObjects();
+      this.requestRectCalculation();
+      return imageDTO;
+    }
+
+    const rasterizeResult = await withResultAsync(async () => {
+      const blob = await canvasToBlob(warped.canvas);
+      return await uploadImage({
+        file: new File([blob], `${this.parent.id}_warp.png`, { type: 'image/png' }),
+        image_category: 'other',
+        is_intermediate: true,
+        silent: true,
+      });
+    });
+
+    if (rasterizeResult.isErr()) {
+      toast({ status: 'error', title: 'Failed to apply transform' });
+      this.log.error({ error: serializeError(rasterizeResult.error) }, 'Failed to rasterize warp preview');
+      return Promise.reject(rasterizeResult.error);
+    }
+
+    const resizeResult = await withResultAsync(() =>
+      this.manager.stateApi.runGraphAndReturnImageOutput({
+        ...CanvasEntityTransformer.buildTransformSmoothingGraph(
+          rasterizeResult.value,
+          warped.rect,
+          transformSmoothingMode
+        ),
+        options: {
+          prepend: true,
+        },
+      })
+    );
+
+    if (resizeResult.isErr()) {
+      toast({ status: 'error', title: 'Failed to apply transform' });
+      this.log.error({ error: serializeError(resizeResult.error) }, 'Failed to smooth warped entity');
+      return Promise.reject(resizeResult.error);
+    }
+
+    const imageObject = imageDTOToImageObject(resizeResult.value);
+    await this.parent.bufferRenderer.setBuffer(imageObject);
+    this.parent.bufferRenderer.commitBuffer({ pushToState: false });
+    this.manager.stateApi.rasterizeEntity({
+      entityIdentifier: this.parent.entityIdentifier,
+      imageObject,
+      position: {
+        x: warped.rect.x,
+        y: warped.rect.y,
+      },
       replaceObjects: true,
     });
     await this.manager.stateApi.waitForRasterizationToFinish();
     await this.parent.syncObjects();
     this.requestRectCalculation();
-    return imageDTO;
+    return resizeResult.value;
   };
 
   getWarpedCanvas = (arg?: { quality?: 'preview' | 'final' }): { canvas: HTMLCanvasElement; rect: Rect } => {
@@ -1653,7 +1817,6 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     ];
     const h = this.computeHomography(srcPts, dstPts);
     if (!this.isValidHomography(h)) {
-      ctx.drawImage(this.warpSourceCanvas, 0, 0, canvas.width, canvas.height);
       return { canvas, rect };
     }
 
