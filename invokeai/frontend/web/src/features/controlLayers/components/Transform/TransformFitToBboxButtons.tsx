@@ -15,6 +15,8 @@ export const TransformFitToBboxButtons = memo(({ adapter }: { adapter: CanvasEnt
   const { t } = useTranslation();
   const [mode, setMode] = useState<Mode>('contain');
   const isProcessing = useStore(adapter.transformer.$isProcessing);
+  const transformMode = useStore(adapter.transformer.$transformMode);
+  const isWarpMode = transformMode === 'warp';
   const onClick = useCallback(() => {
     if (mode === 'contain') {
       adapter.transformer.fitToBboxContain();
@@ -56,12 +58,19 @@ export const TransformFitToBboxButtons = memo(({ adapter }: { adapter: CanvasEnt
     <Flex gap={4} w="full">
       <FormControl maxW={64}>
         <FormLabel m={0}>{t('controlLayers.transform.fitMode')}</FormLabel>
-        <Combobox options={options} value={value} onChange={onChange} isSearchable={false} isClearable={false} />
+        <Combobox
+          options={options}
+          value={value}
+          onChange={onChange}
+          isSearchable={false}
+          isClearable={false}
+          isDisabled={isWarpMode}
+        />
       </FormControl>
       <Button
         size="sm"
         onClick={onClick}
-        isDisabled={isProcessing}
+        isDisabled={isProcessing || isWarpMode}
         loadingText={t('controlLayers.transform.fitToBbox')}
         variant="ghost"
       >

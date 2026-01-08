@@ -16,6 +16,7 @@ const TransformContent = memo(({ adapter }: { adapter: CanvasEntityAdapter }) =>
   const isCanvasFocused = useIsRegionFocused('canvas');
   const isProcessing = useStore(adapter.transformer.$isProcessing);
   const silentTransform = useStore(adapter.transformer.$silentTransform);
+  const transformMode = useStore(adapter.transformer.$transformMode);
 
   useRegisteredHotkeys({
     id: 'applyTransform',
@@ -58,6 +59,23 @@ const TransformContent = memo(({ adapter }: { adapter: CanvasEntityAdapter }) =>
         <Spacer />
         <CanvasOperationIsolatedLayerPreviewSwitch />
       </Flex>
+
+      <ButtonGroup isAttached size="sm" w="full">
+        <Button
+          onClick={() => adapter.transformer.setTransformMode('warp')}
+          isDisabled={isProcessing}
+          variant={transformMode === 'warp' ? 'solid' : 'ghost'}
+        >
+          {t('controlLayers.transform.modeWarp')}
+        </Button>
+        <Button
+          onClick={() => adapter.transformer.setTransformMode('affine')}
+          isDisabled={isProcessing}
+          variant={transformMode === 'affine' ? 'solid' : 'ghost'}
+        >
+          {t('controlLayers.transform.modeAffine')}
+        </Button>
+      </ButtonGroup>
 
       <TransformFitToBboxButtons adapter={adapter} />
 

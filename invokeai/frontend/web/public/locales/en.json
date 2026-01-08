@@ -2509,6 +2509,8 @@
         },
         "transform": {
             "transform": "Transform",
+            "modeWarp": "Warp",
+            "modeAffine": "Scale/Rotate",
             "fitToBbox": "Fit to Bbox",
             "fitMode": "Fit Mode",
             "fitModeContain": "Contain",
