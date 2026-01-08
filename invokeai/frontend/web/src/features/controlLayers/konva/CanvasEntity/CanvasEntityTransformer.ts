@@ -8,7 +8,6 @@ import { CanvasModuleBase } from 'features/controlLayers/konva/CanvasModuleBase'
 import {
   areStageAttrsGonnaExplode,
   canvasToImageData,
-  canvasToBlob,
   getEmptyRect,
   getKonvaNodeDebugAttrs,
   getPrefixedId,
@@ -17,14 +16,12 @@ import {
 } from 'features/controlLayers/konva/util';
 import { selectSelectedEntityIdentifier } from 'features/controlLayers/store/selectors';
 import type { Coordinate, LifecycleCallback, Rect, RectWithRotation } from 'features/controlLayers/store/types';
-import { imageDTOToImageObject } from 'features/controlLayers/store/util';
 import { toast } from 'features/toast/toast';
 import Konva from 'konva';
 import type { GroupConfig } from 'konva/lib/Group';
 import { atom } from 'nanostores';
 import type { Logger } from 'roarr';
 import { serializeError } from 'serialize-error';
-import { uploadImage } from 'services/api/endpoints/images';
 import type { ImageDTO } from 'services/api/types';
 import { assert } from 'tsafe';
 
@@ -87,6 +84,8 @@ type WarpCorners = {
   br: Coordinate;
   bl: Coordinate;
 };
+
+type WarpSide = 'tm' | 'mr' | 'bm' | 'ml';
 
 const DEFAULT_CONFIG: CanvasEntityTransformerConfig = {
   RECT_CALC_DEBOUNCE_MS: 300,
@@ -152,7 +151,7 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
   /**
    * The current transform mode.
    */
-  $transformMode = atom<TransformMode>('warp');
+  $transformMode = atom<TransformMode>('affine');
 
   /**
    * The current interaction mode of the transformer:
@@ -206,10 +205,11 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     proxyRect: Konva.Rect;
     outlineRect: Konva.Rect;
     warpGroup: Konva.Group;
-    warpPreview: Konva.Shape;
+    warpPreview: Konva.Image;
     warpOutline: Konva.Line;
     warpDragArea: Konva.Line;
     warpAnchors: Record<keyof WarpCorners, Konva.Rect>;
+    warpSideAnchors: Record<WarpSide, Konva.Rect>;
   };
 
   warpSourceCanvas: HTMLCanvasElement | null = null;
@@ -217,6 +217,29 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
   warpCorners: WarpCorners | null = null;
   warpDragStartPointer: Coordinate | null = null;
   warpDragStartCorners: WarpCorners | null = null;
+  warpSideDragStartPointer: Coordinate | null = null;
+  warpSideDragStartCorners: WarpCorners | null = null;
+  warpSideDragKey: WarpSide | null = null;
+  affineSnapshot:
+    | {
+        proxyRect: {
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+          scaleX: number;
+          scaleY: number;
+          rotation: number;
+        };
+        objectGroup: {
+          x: number;
+          y: number;
+          scaleX: number;
+          scaleY: number;
+          rotation: number;
+        };
+      }
+    | null = null;
   constructor(parent: CanvasEntityTransformer['parent']) {
     super();
     this.id = getPrefixedId(this.type);
@@ -242,6 +265,24 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
         draggable: true,
         listening: false,
       });
+    const makeWarpSideAnchor = (key: WarpSide) =>
+      new Konva.Rect({
+        name: `${this.type}:warp_side_anchor:${key}`,
+        width: warpAnchorSize,
+        height: warpAnchorSize,
+        cornerRadius: warpAnchorSize * this.config.SCALE_ANCHOR_CORNER_RADIUS_RATIO,
+        offsetX: warpAnchorSize / 2,
+        offsetY: warpAnchorSize / 2,
+        fill: this.config.SCALE_ANCHOR_FILL_COLOR,
+        stroke: this.config.SCALE_ANCHOR_STROKE_COLOR,
+        strokeWidth: this.config.SCALE_ANCHOR_STROKE_WIDTH,
+        draggable: true,
+        listening: false,
+      });
+
+    const emptyPreviewCanvas = document.createElement('canvas');
+    emptyPreviewCanvas.width = 1;
+    emptyPreviewCanvas.height = 1;
 
     this.konva = {
       outlineRect: new Konva.Rect({
@@ -288,10 +329,11 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
         visible: false,
         listening: false,
       }),
-      warpPreview: new Konva.Shape({
+      warpPreview: new Konva.Image({
         name: `${this.type}:warp_preview`,
         listening: false,
-        sceneFunc: this.drawWarpPreview,
+        image: emptyPreviewCanvas,
+        perfectDrawEnabled: false,
       }),
       warpOutline: new Konva.Line({
         name: `${this.type}:warp_outline`,
@@ -315,6 +357,12 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
         tr: makeWarpAnchor('tr'),
         br: makeWarpAnchor('br'),
         bl: makeWarpAnchor('bl'),
+      },
+      warpSideAnchors: {
+        tm: makeWarpSideAnchor('tm'),
+        mr: makeWarpSideAnchor('mr'),
+        bm: makeWarpSideAnchor('bm'),
+        ml: makeWarpSideAnchor('ml'),
       },
     };
 
@@ -340,10 +388,21 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     this.konva.warpDragArea.on('dragmove', this.onWarpDragMove);
     this.konva.warpDragArea.on('dragend', this.onWarpDragEnd);
 
-    for (const [key, anchor] of Object.entries(this.konva.warpAnchors) as [keyof WarpCorners, Konva.Rect][]) {
-      anchor.on('dragstart', () => key);
+    for (const anchor of Object.values(this.konva.warpAnchors)) {
+      anchor.on('dragstart', () => undefined);
       anchor.on('dragmove', this.onWarpAnchorDragMove);
       anchor.on('dragend', this.onWarpAnchorDragEnd);
+      anchor.on('pointerenter', () => {
+        this.manager.stage.setCursor('move');
+      });
+      anchor.on('pointerleave', () => {
+        this.manager.stage.setCursor('default');
+      });
+    }
+    for (const anchor of Object.values(this.konva.warpSideAnchors)) {
+      anchor.on('dragstart', this.onWarpSideDragStart);
+      anchor.on('dragmove', this.onWarpSideDragMove);
+      anchor.on('dragend', this.onWarpSideDragEnd);
       anchor.on('pointerenter', () => {
         this.manager.stage.setCursor('move');
       });
@@ -357,6 +416,9 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
       this.konva.proxyRect.off('dragmove dragend pointerenter pointerleave');
       this.konva.warpDragArea.off('dragstart dragmove dragend');
       for (const anchor of Object.values(this.konva.warpAnchors)) {
+        anchor.off('dragstart dragmove dragend pointerenter pointerleave');
+      }
+      for (const anchor of Object.values(this.konva.warpSideAnchors)) {
         anchor.off('dragstart dragmove dragend pointerenter pointerleave');
       }
     });
@@ -400,6 +462,9 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     this.konva.warpGroup.add(this.konva.warpOutline);
     this.konva.warpGroup.add(this.konva.warpDragArea);
     for (const anchor of Object.values(this.konva.warpAnchors)) {
+      this.konva.warpGroup.add(anchor);
+    }
+    for (const anchor of Object.values(this.konva.warpSideAnchors)) {
       this.konva.warpGroup.add(anchor);
     }
 
@@ -454,29 +519,38 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     if (current === mode) {
       return;
     }
-    if (
-      this.$isTransforming.get() &&
-      current === 'warp' &&
-      mode === 'affine' &&
-      this.warpCorners &&
-      this.warpSourceCanvas
-    ) {
-      this.$transformMode.set(mode);
-      void this.applyWarpTransform().then(() => {
-        this.requestRectCalculation();
-        this.teardownWarpPreview();
-        this.syncInteractionState();
-      });
-      return;
-    }
-
     this.$transformMode.set(mode);
     if (this.$isTransforming.get()) {
       if (mode === 'warp') {
+        this.affineSnapshot = {
+          proxyRect: {
+            x: this.konva.proxyRect.x(),
+            y: this.konva.proxyRect.y(),
+            width: this.konva.proxyRect.width(),
+            height: this.konva.proxyRect.height(),
+            scaleX: this.konva.proxyRect.scaleX(),
+            scaleY: this.konva.proxyRect.scaleY(),
+            rotation: this.konva.proxyRect.rotation(),
+          },
+          objectGroup: {
+            x: this.parent.renderer.konva.objectGroup.x(),
+            y: this.parent.renderer.konva.objectGroup.y(),
+            scaleX: this.parent.renderer.konva.objectGroup.scaleX(),
+            scaleY: this.parent.renderer.konva.objectGroup.scaleY(),
+            rotation: this.parent.renderer.konva.objectGroup.rotation(),
+          },
+        };
         this.prepareWarpPreview();
       } else if (current === 'warp') {
         this.teardownWarpPreview();
-        this.resetProxyRectToPixelRect();
+        if (this.affineSnapshot) {
+          const { proxyRect, objectGroup } = this.affineSnapshot;
+          this.parent.renderer.konva.objectGroup.setAttrs(objectGroup);
+          this.konva.proxyRect.setAttrs(proxyRect);
+          this.syncScale();
+          this.konva.transformer.forceUpdate();
+        }
+        this.affineSnapshot = null;
       }
     }
     this.syncInteractionState();
@@ -492,8 +566,9 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     if (!key || !(key in this.warpCorners)) {
       return;
     }
-    const localPos = anchorNode.position();
-    const snapped = this.snapWarpAnchor(localPos);
+    const absPos = anchorNode.getAbsolutePosition();
+    const snappedAbs = this.snapWarpAnchor(absPos);
+    const snapped = this.toLayerPoint(snappedAbs);
     this.warpCorners = { ...this.warpCorners, [key]: snapped };
     anchorNode.position(snapped);
     this.updateWarpBBoxFromCorners();
@@ -555,14 +630,100 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     this.warpDragStartCorners = null;
   };
 
+  onWarpSideDragStart = (e: Konva.KonvaEventObject<DragEvent>) => {
+    if (!this.warpCorners) {
+      return;
+    }
+    const anchorNode = e.target as Konva.Rect;
+    const nameParts = anchorNode.name().split(':');
+    const key = nameParts.at(-1) as WarpSide | undefined;
+    if (!key) {
+      return;
+    }
+    const p = this.getStagePointer();
+    if (!p) {
+      return;
+    }
+    this.warpSideDragKey = key;
+    this.warpSideDragStartPointer = p;
+    this.warpSideDragStartCorners = {
+      tl: { ...this.warpCorners.tl },
+      tr: { ...this.warpCorners.tr },
+      br: { ...this.warpCorners.br },
+      bl: { ...this.warpCorners.bl },
+    };
+  };
+
+  onWarpSideDragMove = () => {
+    if (!this.warpSideDragKey || !this.warpSideDragStartPointer || !this.warpSideDragStartCorners) {
+      return;
+    }
+    const p = this.getStagePointer();
+    if (!p) {
+      return;
+    }
+    const dx = p.x - this.warpSideDragStartPointer.x;
+    const dy = p.y - this.warpSideDragStartPointer.y;
+    const s = this.warpSideDragStartCorners;
+    let next: WarpCorners = { ...s };
+    if (this.warpSideDragKey === 'tm') {
+      next = {
+        ...s,
+        tl: { x: s.tl.x + dx, y: s.tl.y + dy },
+        tr: { x: s.tr.x + dx, y: s.tr.y + dy },
+      };
+    } else if (this.warpSideDragKey === 'mr') {
+      next = {
+        ...s,
+        tr: { x: s.tr.x + dx, y: s.tr.y + dy },
+        br: { x: s.br.x + dx, y: s.br.y + dy },
+      };
+    } else if (this.warpSideDragKey === 'bm') {
+      next = {
+        ...s,
+        br: { x: s.br.x + dx, y: s.br.y + dy },
+        bl: { x: s.bl.x + dx, y: s.bl.y + dy },
+      };
+    } else if (this.warpSideDragKey === 'ml') {
+      next = {
+        ...s,
+        tl: { x: s.tl.x + dx, y: s.tl.y + dy },
+        bl: { x: s.bl.x + dx, y: s.bl.y + dy },
+      };
+    }
+    this.warpCorners = next;
+    this.updateWarpBBoxFromCorners();
+    this.updateWarpNodes();
+  };
+
+  onWarpSideDragEnd = () => {
+    this.warpSideDragKey = null;
+    this.warpSideDragStartPointer = null;
+    this.warpSideDragStartCorners = null;
+  };
+
+  toLayerPoint = (pos: Coordinate): Coordinate => {
+    const transform = this.parent.konva.layer.getAbsoluteTransform().copy();
+    transform.invert();
+    return transform.point(pos);
+  };
+
+
+
   snapWarpAnchor = (pos: Coordinate): Coordinate => {
     const gridSize = this.manager.stateApi.getPositionGridSize();
     if (gridSize <= 1) {
       return pos;
     }
+    const stageScale = this.manager.stage.getScale();
+    const stagePos = this.manager.stage.getPosition();
+    const targetX = roundToMultiple(pos.x / stageScale, gridSize);
+    const targetY = roundToMultiple(pos.y / stageScale, gridSize);
+    const scaledOffsetX = stagePos.x % (stageScale * gridSize);
+    const scaledOffsetY = stagePos.y % (stageScale * gridSize);
     return {
-      x: roundToMultiple(pos.x, gridSize),
-      y: roundToMultiple(pos.y, gridSize),
+      x: targetX * stageScale + scaledOffsetX,
+      y: targetY * stageScale + scaledOffsetY,
     };
   };
 
@@ -578,7 +739,122 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     this.konva.warpAnchors.tr.position(tr);
     this.konva.warpAnchors.br.position(br);
     this.konva.warpAnchors.bl.position(bl);
+    this.konva.warpSideAnchors.tm.position({ x: (tl.x + tr.x) / 2, y: (tl.y + tr.y) / 2 });
+    this.konva.warpSideAnchors.mr.position({ x: (tr.x + br.x) / 2, y: (tr.y + br.y) / 2 });
+    this.konva.warpSideAnchors.bm.position({ x: (br.x + bl.x) / 2, y: (br.y + bl.y) / 2 });
+    this.konva.warpSideAnchors.ml.position({ x: (bl.x + tl.x) / 2, y: (bl.y + tl.y) / 2 });
+    this.updateWarpPreviewImage();
     this.konva.warpPreview.getLayer()?.batchDraw();
+    this.konva.warpPreview.draw();
+  };
+
+  updateWarpPreviewImage = () => {
+    if (!this.warpSourceCanvas || !this.warpCorners) {
+      return;
+    }
+    const warped = this.getWarpedCanvas({ quality: 'preview' });
+    this.konva.warpPreview.setAttrs({
+      x: warped.rect.x,
+      y: warped.rect.y,
+      width: Math.max(1, warped.rect.width),
+      height: Math.max(1, warped.rect.height),
+    });
+    this.konva.warpPreview.image(warped.canvas);
+  };
+
+  computeHomography = (src: Coordinate[], dst: Coordinate[]): number[] => {
+    if (src.length !== dst.length || src.length < 4) {
+      return new Array(8).fill(0);
+    }
+    const A: number[][] = [];
+    const b: number[] = [];
+    for (let i = 0; i < src.length; i++) {
+      const s = src[i];
+      const d = dst[i];
+      if (!s || !d) {
+        return new Array(8).fill(0);
+      }
+      const { x, y } = s;
+      const { x: u, y: v } = d;
+      A.push([x, y, 1, 0, 0, 0, -u * x, -u * y]);
+      b.push(u);
+      A.push([0, 0, 0, x, y, 1, -v * x, -v * y]);
+      b.push(v);
+    }
+    return this.solveLinearSystem(A, b);
+  };
+
+  solveLinearSystem = (A: number[][], b: number[]): number[] => {
+    const n = b.length;
+    const M = A.map((row, i) => [...row, b[i]]);
+
+    for (let col = 0; col < n; col++) {
+      let pivotRow = col;
+      let maxVal = Math.abs(M[col]?.[col] ?? 0);
+      for (let row = col + 1; row < n; row++) {
+        const val = Math.abs(M[row]?.[col] ?? 0);
+        if (val > maxVal) {
+          maxVal = val;
+          pivotRow = row;
+        }
+      }
+      if (maxVal === 0) {
+        return new Array(n).fill(0);
+      }
+      if (pivotRow !== col) {
+        const tmp = M[col]!;
+        M[col] = M[pivotRow]!;
+        M[pivotRow] = tmp;
+      }
+      const colData = M[col];
+      if (!colData) {
+        return new Array(n).fill(0);
+      }
+      const pivot = colData[col] ?? 0;
+      for (let c = col; c <= n; c++) {
+        const value = colData[c] ?? 0;
+        colData[c] = value / pivot;
+      }
+      for (let row = 0; row < n; row++) {
+        if (row === col) {
+          continue;
+        }
+        const rowData = M[row];
+        if (!rowData) {
+          continue;
+        }
+        const factor = rowData[col] ?? 0;
+        for (let c = col; c <= n; c++) {
+          const rowValue = rowData[c] ?? 0;
+          const colValue = colData[c] ?? 0;
+          rowData[c] = rowValue - factor * colValue;
+        }
+      }
+    }
+
+    return M.map((row) => row?.[n] ?? 0);
+  };
+
+  applyHomography = (h: number[], p: Coordinate): Coordinate => {
+    const [h11 = 0, h12 = 0, h13 = 0, h21 = 0, h22 = 0, h23 = 0, h31 = 0, h32 = 0] = h;
+    const denom = h31 * p.x + h32 * p.y + 1;
+    if (denom === 0) {
+      return { x: 0, y: 0 };
+    }
+    return {
+      x: (h11 * p.x + h12 * p.y + h13) / denom,
+      y: (h21 * p.x + h22 * p.y + h23) / denom,
+    };
+  };
+
+  isValidHomography = (h: number[]): boolean => {
+    return h.length === 8 && h.every((value) => Number.isFinite(value));
+  };
+
+  getWarpSegments = (width: number, height: number, quality: 'preview' | 'final'): number => {
+    const targetSize = quality === 'preview' ? 128 : 64;
+    const maxDim = Math.max(width, height);
+    return Math.max(4, Math.ceil(maxDim / targetSize));
   };
 
   updateWarpBBoxFromCorners = () => {
@@ -619,26 +895,6 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     this.update(this.parent.state.position, pixelRect);
   };
 
-  drawWarpPreview = (context: Konva.Context, shape: Konva.Shape) => {
-    if (!this.warpSourceCanvas || !this.warpCorners) {
-      return;
-    }
-    const { width, height } = this.warpSourceCanvas;
-    const src = {
-      tl: { x: 0, y: 0 },
-      tr: { x: width, y: 0 },
-      br: { x: width, y: height },
-      bl: { x: 0, y: height },
-    };
-    const dst = this.warpCorners;
-
-    context.save();
-    this.drawWarpTriangle(context, this.warpSourceCanvas, [src.tl, src.tr, src.br], [dst.tl, dst.tr, dst.br]);
-    this.drawWarpTriangle(context, this.warpSourceCanvas, [src.tl, src.br, src.bl], [dst.tl, dst.br, dst.bl]);
-    context.restore();
-    context.fillStrokeShape(shape);
-  };
-
   drawWarpTriangle = (
     context: Konva.Context | CanvasRenderingContext2D,
     image: HTMLCanvasElement,
@@ -666,11 +922,27 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
         d2.y * (s0.x * s1.y - s1.x * s0.y)) /
       denom;
 
+    const centroid = { x: (d0.x + d1.x + d2.x) / 3, y: (d0.y + d1.y + d2.y) / 3 };
+    const expand = (p: Coordinate, pad: number): Coordinate => {
+      const vx = p.x - centroid.x;
+      const vy = p.y - centroid.y;
+      const len = Math.hypot(vx, vy);
+      if (len === 0) {
+        return p;
+      }
+      const scale = (len + pad) / len;
+      return { x: centroid.x + vx * scale, y: centroid.y + vy * scale };
+    };
+    const pad = 0.75;
+    const c0 = expand(d0, pad);
+    const c1 = expand(d1, pad);
+    const c2 = expand(d2, pad);
+
     context.save();
     context.beginPath();
-    context.moveTo(d0.x, d0.y);
-    context.lineTo(d1.x, d1.y);
-    context.lineTo(d2.x, d2.y);
+    context.moveTo(c0.x, c0.y);
+    context.lineTo(c1.x, c1.y);
+    context.lineTo(c2.x, c2.y);
     context.closePath();
     context.clip();
     context.setTransform(a, b, c, d, e, f);
@@ -1108,6 +1380,12 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
       anchor.offsetX(anchorSize / 2);
       anchor.offsetY(anchorSize / 2);
     }
+    for (const anchor of Object.values(this.konva.warpSideAnchors)) {
+      anchor.width(anchorSize);
+      anchor.height(anchorSize);
+      anchor.offsetX(anchorSize / 2);
+      anchor.offsetY(anchorSize / 2);
+    }
   };
 
   /**
@@ -1139,10 +1417,11 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     this.$silentTransform.set(silent);
     this.$isTransforming.set(true);
     this.manager.stateApi.$transformingAdapter.set(this.parent);
-    this.syncInteractionState();
-    if (this.$transformMode.get() === 'warp') {
-      this.prepareWarpPreview();
+    if (this.$transformMode.get() !== 'affine') {
+      this.$transformMode.set('affine');
     }
+    this.teardownWarpPreview();
+    this.syncInteractionState();
   };
 
   /**
@@ -1157,14 +1436,25 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     }
     this.log.debug('Applying transform');
     this.$isProcessing.set(true);
-    this._setInteractionMode('off');
     if (this.$transformMode.get() === 'warp') {
+      this.$interactionMode.set('off');
+      this._disableDrag();
+      this._disableTransform();
+      this.konva.warpGroup.listening(false);
+      this.konva.warpDragArea.listening(false);
+      for (const anchor of Object.values(this.konva.warpAnchors)) {
+        anchor.listening(false);
+      }
+      for (const anchor of Object.values(this.konva.warpSideAnchors)) {
+        anchor.listening(false);
+      }
       const result = await withResultAsync(() => this.applyWarpTransform());
       if (result.isErr()) {
         toast({ status: 'error', title: 'Failed to apply transform' });
         this.log.error({ error: serializeError(result.error) }, 'Failed to apply warp transform');
       }
     } else {
+      this._setInteractionMode('off');
       const rect = this.getRelativeRect();
       const rasterizeResult = await withResultAsync(() =>
         this.parent.renderer.rasterize({
@@ -1198,6 +1488,7 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
 
     this.$isTransforming.set(false);
     this.teardownWarpPreview();
+    this.parent.renderer.showObjects();
 
     // Reset the transform of the the entity. We've either replaced the transformed objects with a rasterized image, or
     // canceled a transformation. In either case, the scale should be reset.
@@ -1234,7 +1525,30 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
       return;
     }
     const canvas = this.parent.renderer.getCanvas({ rect: roundRect(rect), attrs: { opacity: 1, filters: [] } });
-    this.warpSourceCanvas = canvas;
+    const rotation = this.konva.proxyRect.rotation();
+    if (rotation !== 0) {
+      const unrotated = document.createElement('canvas');
+      const targetWidth = Math.max(
+        1,
+        Math.round(Math.abs(this.konva.proxyRect.width() * this.konva.proxyRect.scaleX()))
+      );
+      const targetHeight = Math.max(
+        1,
+        Math.round(Math.abs(this.konva.proxyRect.height() * this.konva.proxyRect.scaleY()))
+      );
+      unrotated.width = targetWidth;
+      unrotated.height = targetHeight;
+      const ctx = unrotated.getContext('2d');
+      if (!ctx) {
+        return;
+      }
+      ctx.translate(unrotated.width / 2, unrotated.height / 2);
+      ctx.rotate((-rotation * Math.PI) / 180);
+      ctx.drawImage(canvas, -rect.width / 2, -rect.height / 2);
+      this.warpSourceCanvas = unrotated;
+    } else {
+      this.warpSourceCanvas = canvas;
+    }
     this.warpSourceRect = rect;
     this.warpCorners = this.getProxyRectCorners();
     this.konva.warpGroup.visible(true);
@@ -1243,6 +1557,10 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     for (const anchor of Object.values(this.konva.warpAnchors)) {
       anchor.listening(true);
     }
+    for (const anchor of Object.values(this.konva.warpSideAnchors)) {
+      anchor.listening(true);
+    }
+    this.parent.renderer.hideObjects();
     this.syncWarpScale();
     this.updateWarpNodes();
   };
@@ -1281,34 +1599,30 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     for (const anchor of Object.values(this.konva.warpAnchors)) {
       anchor.listening(false);
     }
+    for (const anchor of Object.values(this.konva.warpSideAnchors)) {
+      anchor.listening(false);
+    }
     this.parent.renderer.showObjects();
   };
 
   applyWarpTransform = async (): Promise<ImageDTO> => {
     assert(this.warpSourceCanvas && this.warpCorners, 'Missing warp source');
     this.updateWarpBBoxFromCorners();
-    const warped = this.getWarpedCanvas();
-    const blob = await canvasToBlob(warped.canvas);
-    const imageDTO = await uploadImage({
-      file: new File([blob], `${this.id}_warp.png`, { type: 'image/png' }),
-      image_category: 'other',
-      is_intermediate: true,
-      silent: true,
-    });
-    const imageObject = imageDTOToImageObject(imageDTO);
-    await this.parent.bufferRenderer.setBuffer(imageObject, true);
-    this.parent.bufferRenderer.commitBuffer({ pushToState: false });
-    this.manager.stateApi.rasterizeEntity({
-      entityIdentifier: this.parent.entityIdentifier,
-      imageObject,
-      position: { x: Math.round(warped.rect.x), y: Math.round(warped.rect.y) },
+    const warped = this.getWarpedCanvas({ quality: 'final' });
+    const imageDTO = await this.parent.renderer.rasterizeCanvas({
+      canvas: warped.canvas,
+      rect: warped.rect,
       replaceObjects: true,
     });
+    await this.manager.stateApi.waitForRasterizationToFinish();
+    await this.parent.syncObjects();
+    this.requestRectCalculation();
     return imageDTO;
   };
 
-  getWarpedCanvas = (): { canvas: HTMLCanvasElement; rect: Rect } => {
+  getWarpedCanvas = (arg?: { quality?: 'preview' | 'final' }): { canvas: HTMLCanvasElement; rect: Rect } => {
     assert(this.warpSourceCanvas && this.warpCorners, 'Missing warp source');
+    const quality: 'preview' | 'final' = arg?.quality ?? 'final';
     const { tl, tr, br, bl } = this.warpCorners;
     const minX = Math.min(tl.x, tr.x, br.x, bl.x);
     const maxX = Math.max(tl.x, tr.x, br.x, bl.x);
@@ -1320,29 +1634,53 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     canvas.height = Math.max(1, Math.ceil(rect.height));
     const ctx = canvas.getContext('2d');
     assert(ctx, 'Failed to get canvas context');
-    ctx.imageSmoothingEnabled = false;
-    const offsetCorners = {
-      tl: { x: tl.x - rect.x, y: tl.y - rect.y },
-      tr: { x: tr.x - rect.x, y: tr.y - rect.y },
-      br: { x: br.x - rect.x, y: br.y - rect.y },
-      bl: { x: bl.x - rect.x, y: bl.y - rect.y },
-    };
-    const src = {
-      tl: { x: 0, y: 0 },
-      tr: { x: this.warpSourceCanvas.width, y: 0 },
-      br: { x: this.warpSourceCanvas.width, y: this.warpSourceCanvas.height },
-      bl: { x: 0, y: this.warpSourceCanvas.height },
-    };
-    this.drawWarpTriangle(ctx, this.warpSourceCanvas, [src.tl, src.tr, src.br], [
-      offsetCorners.tl,
-      offsetCorners.tr,
-      offsetCorners.br,
-    ]);
-    this.drawWarpTriangle(ctx, this.warpSourceCanvas, [src.tl, src.br, src.bl], [
-      offsetCorners.tl,
-      offsetCorners.br,
-      offsetCorners.bl,
-    ]);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    const srcW = this.warpSourceCanvas.width;
+    const srcH = this.warpSourceCanvas.height;
+    const srcPts = [
+      { x: 0, y: 0 },
+      { x: srcW, y: 0 },
+      { x: srcW, y: srcH },
+      { x: 0, y: srcH },
+    ];
+    const dstPts = [
+      { x: tl.x - rect.x, y: tl.y - rect.y },
+      { x: tr.x - rect.x, y: tr.y - rect.y },
+      { x: br.x - rect.x, y: br.y - rect.y },
+      { x: bl.x - rect.x, y: bl.y - rect.y },
+    ];
+    const h = this.computeHomography(srcPts, dstPts);
+    if (!this.isValidHomography(h)) {
+      ctx.drawImage(this.warpSourceCanvas, 0, 0, canvas.width, canvas.height);
+      return { canvas, rect };
+    }
+
+    const segments = this.getWarpSegments(srcW, srcH, quality);
+    const stepX = srcW / segments;
+    const stepY = srcH / segments;
+
+    for (let y = 0; y < segments; y++) {
+      for (let x = 0; x < segments; x++) {
+        const x0 = x * stepX;
+        const x1 = (x + 1) * stepX;
+        const y0 = y * stepY;
+        const y1 = (y + 1) * stepY;
+        const p00 = { x: x0, y: y0 };
+        const p10 = { x: x1, y: y0 };
+        const p11 = { x: x1, y: y1 };
+        const p01 = { x: x0, y: y1 };
+        const d00 = this.applyHomography(h, p00);
+        const d10 = this.applyHomography(h, p10);
+        const d11 = this.applyHomography(h, p11);
+        const d01 = this.applyHomography(h, p01);
+
+        this.drawWarpTriangle(ctx, this.warpSourceCanvas, [p00, p10, p11], [d00, d10, d11]);
+        this.drawWarpTriangle(ctx, this.warpSourceCanvas, [p00, p11, p01], [d00, d11, d01]);
+      }
+    }
+
     return { canvas, rect };
   };
 
@@ -1562,6 +1900,10 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     for (const anchor of Object.values(this.konva.warpAnchors)) {
       anchor.listening(true);
     }
+    for (const anchor of Object.values(this.konva.warpSideAnchors)) {
+      anchor.listening(true);
+    }
+    this.parent.renderer.hideObjects();
     if (!this.warpSourceCanvas) {
       this.prepareWarpPreview();
     }
@@ -1572,6 +1914,9 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     this.konva.warpGroup.listening(false);
     this.konva.warpDragArea.listening(false);
     for (const anchor of Object.values(this.konva.warpAnchors)) {
+      anchor.listening(false);
+    }
+    for (const anchor of Object.values(this.konva.warpSideAnchors)) {
       anchor.listening(false);
     }
   };

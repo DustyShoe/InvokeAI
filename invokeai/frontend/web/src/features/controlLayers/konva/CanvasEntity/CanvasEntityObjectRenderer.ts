@@ -15,6 +15,7 @@ import { LightnessToAlphaFilter } from 'features/controlLayers/konva/filters';
 import { getPatternSVG } from 'features/controlLayers/konva/patterns/getPatternSVG';
 import {
   areStageAttrsGonnaExplode,
+  canvasToBlob,
   getKonvaNodeDebugAttrs,
   getPrefixedId,
   konvaNodeToBlob,
@@ -196,10 +197,12 @@ export class CanvasEntityObjectRenderer extends CanvasModuleBase {
 
   hideObjects = () => {
     this.konva.objectGroup.hide();
+    this.konva.objectGroup.clearCache();
   };
 
   showObjects = () => {
     this.konva.objectGroup.show();
+    this.syncKonvaCache(true);
   };
 
   adoptObjectRenderer = (renderer: AnyObjectRenderer) => {
@@ -534,6 +537,49 @@ export class CanvasEntityObjectRenderer extends CanvasModuleBase {
       return imageDTO;
     } catch (error) {
       this.log.error({ rasterizeArgs, error: serializeError(error as Error) }, 'Failed to rasterize entity');
+      throw error;
+    } finally {
+      this.manager.stateApi.$rasterizingAdapter.set(null);
+    }
+  };
+
+  rasterizeCanvas = async (options: { canvas: HTMLCanvasElement; rect: Rect; replaceObjects?: boolean }) => {
+    const rasterizingAdapter = this.manager.stateApi.$rasterizingAdapter.get();
+    if (rasterizingAdapter) {
+      await this.manager.stateApi.waitForRasterizationToFinish();
+    }
+
+    const { canvas, rect, replaceObjects } = { replaceObjects: false, ...options };
+    let imageDTO: ImageDTO | null = null;
+    this.log.trace({ rect }, 'Rasterizing entity from canvas');
+    this.manager.stateApi.$rasterizingAdapter.set(this.parent);
+
+    try {
+      const blob = await canvasToBlob(canvas);
+      if (this.manager._isDebugging) {
+        previewBlob(blob, 'Rasterized entity from canvas');
+      }
+      imageDTO = await uploadImage({
+        file: new File([blob], `${this.id}_rasterized.png`, { type: 'image/png' }),
+        image_category: 'other',
+        is_intermediate: true,
+        silent: true,
+      });
+      const imageObject = imageDTOToImageObject(imageDTO);
+      if (replaceObjects) {
+        await this.parent.bufferRenderer.setBuffer(imageObject);
+        this.parent.bufferRenderer.commitBuffer({ pushToState: false });
+      }
+      this.manager.stateApi.rasterizeEntity({
+        entityIdentifier: this.parent.entityIdentifier,
+        imageObject,
+        position: { x: Math.round(rect.x), y: Math.round(rect.y) },
+        replaceObjects,
+      });
+      this.invalidateRasterCache();
+      return imageDTO;
+    } catch (error) {
+      this.log.error({ rect, error: serializeError(error as Error) }, 'Failed to rasterize entity from canvas');
       throw error;
     } finally {
       this.manager.stateApi.$rasterizingAdapter.set(null);

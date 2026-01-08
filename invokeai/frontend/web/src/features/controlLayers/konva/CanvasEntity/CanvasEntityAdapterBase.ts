@@ -406,6 +406,7 @@ export abstract class CanvasEntityAdapterBase<T extends CanvasEntityState, U ext
     this.transformer.konva.outlineRect.zIndex(zIndex++);
     this.transformer.konva.proxyRect.zIndex(zIndex++);
     this.transformer.konva.transformer.zIndex(zIndex++);
+    this.transformer.konva.warpGroup.zIndex(zIndex++);
   };
 
   /**
