@@ -9,9 +9,6 @@ import { z } from 'zod';
 const zAutoSwitchMode = z.enum(['off', 'switch_on_start', 'switch_on_finish']);
 export type AutoSwitchMode = z.infer<typeof zAutoSwitchMode>;
 
-const zTransformSmoothingMode = z.enum(['bilinear', 'bicubic', 'hamming', 'lanczos']);
-export type TransformSmoothingMode = z.infer<typeof zTransformSmoothingMode>;
-
 const zCanvasSettingsState = z.object({
   /**
    * Whether to show HUD (Heads-Up Display) on the canvas.
@@ -89,14 +86,6 @@ const zCanvasSettingsState = z.object({
    */
   ruleOfThirds: z.boolean(),
   /**
-   * Whether to apply smoothing when rasterizing transformed layers.
-   */
-  transformSmoothingEnabled: z.boolean().default(false),
-  /**
-   * The resampling mode to use when smoothing transformed layers.
-   */
-  transformSmoothingMode: zTransformSmoothingMode.default('bicubic'),
-  /**
    * Whether to save all staging images to the gallery instead of keeping them as intermediate images.
    */
   saveAllImagesToGallery: z.boolean(),
@@ -134,8 +123,6 @@ const getInitialState = (): CanvasSettingsState => ({
   saveAllImagesToGallery: false,
   stagingAreaAutoSwitch: 'switch_on_start',
   fillColorPickerPinned: false,
-  transformSmoothingEnabled: false,
-  transformSmoothingMode: 'bicubic',
 });
 
 const slice = createSlice({
@@ -209,15 +196,6 @@ const slice = createSlice({
     settingsSaveAllImagesToGalleryToggled: (state) => {
       state.saveAllImagesToGallery = !state.saveAllImagesToGallery;
     },
-    settingsTransformSmoothingEnabledToggled: (state) => {
-      state.transformSmoothingEnabled = !state.transformSmoothingEnabled;
-    },
-    settingsTransformSmoothingModeChanged: (
-      state,
-      action: PayloadAction<CanvasSettingsState['transformSmoothingMode']>
-    ) => {
-      state.transformSmoothingMode = action.payload;
-    },
     settingsStagingAreaAutoSwitchChanged: (
       state,
       action: PayloadAction<CanvasSettingsState['stagingAreaAutoSwitch']>
@@ -252,8 +230,6 @@ export const {
   settingsPressureSensitivityToggled,
   settingsRuleOfThirdsToggled,
   settingsSaveAllImagesToGalleryToggled,
-  settingsTransformSmoothingEnabledToggled,
-  settingsTransformSmoothingModeChanged,
   settingsStagingAreaAutoSwitchChanged,
   settingsFillColorPickerPinnedSet,
 } = slice.actions;
@@ -291,7 +267,3 @@ export const selectPressureSensitivity = createCanvasSettingsSelector((settings)
 export const selectRuleOfThirds = createCanvasSettingsSelector((settings) => settings.ruleOfThirds);
 export const selectSaveAllImagesToGallery = createCanvasSettingsSelector((settings) => settings.saveAllImagesToGallery);
 export const selectStagingAreaAutoSwitch = createCanvasSettingsSelector((settings) => settings.stagingAreaAutoSwitch);
-export const selectTransformSmoothingEnabled = createCanvasSettingsSelector(
-  (settings) => settings.transformSmoothingEnabled
-);
-export const selectTransformSmoothingMode = createCanvasSettingsSelector((settings) => settings.transformSmoothingMode);

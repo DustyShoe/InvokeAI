@@ -3,7 +3,6 @@ import { useStore } from '@nanostores/react';
 import { useFocusRegion, useIsRegionFocused } from 'common/hooks/focus';
 import { CanvasOperationIsolatedLayerPreviewSwitch } from 'features/controlLayers/components/CanvasOperationIsolatedLayerPreviewSwitch';
 import { TransformFitToBboxButtons } from 'features/controlLayers/components/Transform/TransformFitToBboxButtons';
-import { TransformSmoothingControls } from 'features/controlLayers/components/Transform/TransformSmoothingControls';
 import { useCanvasManager } from 'features/controlLayers/contexts/CanvasManagerProviderGate';
 import type { CanvasEntityAdapter } from 'features/controlLayers/konva/CanvasEntity/types';
 import { useRegisteredHotkeys } from 'features/system/components/HotkeysModal/useHotkeyData';
@@ -79,8 +78,6 @@ const TransformContent = memo(({ adapter }: { adapter: CanvasEntityAdapter }) =>
           {t('controlLayers.transform.modeAffine')}
         </Button>
       </ButtonGroup>
-
-      <TransformSmoothingControls />
 
       <TransformFitToBboxButtons adapter={adapter} />
 
