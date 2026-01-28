@@ -2226,6 +2226,8 @@
         "deletePrompt": "Delete Prompt",
         "deleteReferenceImage": "Delete Reference Image",
         "showHUD": "Show HUD",
+        "showStagingThumbnails": "Show Staging Thumbnails",
+        "stagingThumbnailSize": "Staging Thumbnail Size",
         "rectangle": "Rectangle",
         "maskFill": "Mask Fill",
         "maskLayerEmpty": "Mask layer is empty",

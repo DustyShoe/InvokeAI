@@ -105,6 +105,14 @@ const zCanvasSettingsState = z.object({
    */
   stagingAreaAutoSwitch: zAutoSwitchMode,
   /**
+   * Whether to show preview thumbnails in the staging area.
+   */
+  showStagingThumbnails: z.boolean().default(true),
+  /**
+   * The size (px) of preview thumbnails in the staging area.
+   */
+  stagingThumbnailSize: z.int().gt(0).default(72),
+  /**
    * Whether the fill color picker UI is pinned (persistently shown in the canvas overlay).
    */
   fillColorPickerPinned: z.boolean(),
@@ -133,6 +141,8 @@ const getInitialState = (): CanvasSettingsState => ({
   ruleOfThirds: false,
   saveAllImagesToGallery: false,
   stagingAreaAutoSwitch: 'switch_on_start',
+  showStagingThumbnails: true,
+  stagingThumbnailSize: 72,
   fillColorPickerPinned: false,
   transformSmoothingEnabled: false,
   transformSmoothingMode: 'bicubic',
@@ -209,6 +219,15 @@ const slice = createSlice({
     settingsSaveAllImagesToGalleryToggled: (state) => {
       state.saveAllImagesToGallery = !state.saveAllImagesToGallery;
     },
+    settingsShowStagingThumbnailsToggled: (state) => {
+      state.showStagingThumbnails = !state.showStagingThumbnails;
+    },
+    settingsStagingThumbnailSizeChanged: (
+      state,
+      action: PayloadAction<CanvasSettingsState['stagingThumbnailSize']>
+    ) => {
+      state.stagingThumbnailSize = Math.round(action.payload);
+    },
     settingsTransformSmoothingEnabledToggled: (state) => {
       state.transformSmoothingEnabled = !state.transformSmoothingEnabled;
     },
@@ -252,6 +271,8 @@ export const {
   settingsPressureSensitivityToggled,
   settingsRuleOfThirdsToggled,
   settingsSaveAllImagesToGalleryToggled,
+  settingsShowStagingThumbnailsToggled,
+  settingsStagingThumbnailSizeChanged,
   settingsTransformSmoothingEnabledToggled,
   settingsTransformSmoothingModeChanged,
   settingsStagingAreaAutoSwitchChanged,
@@ -290,6 +311,8 @@ export const selectIsolatedLayerPreview = createCanvasSettingsSelector((settings
 export const selectPressureSensitivity = createCanvasSettingsSelector((settings) => settings.pressureSensitivity);
 export const selectRuleOfThirds = createCanvasSettingsSelector((settings) => settings.ruleOfThirds);
 export const selectSaveAllImagesToGallery = createCanvasSettingsSelector((settings) => settings.saveAllImagesToGallery);
+export const selectShowStagingThumbnails = createCanvasSettingsSelector((settings) => settings.showStagingThumbnails);
+export const selectStagingThumbnailSize = createCanvasSettingsSelector((settings) => settings.stagingThumbnailSize);
 export const selectStagingAreaAutoSwitch = createCanvasSettingsSelector((settings) => settings.stagingAreaAutoSwitch);
 export const selectTransformSmoothingEnabled = createCanvasSettingsSelector(
   (settings) => settings.transformSmoothingEnabled

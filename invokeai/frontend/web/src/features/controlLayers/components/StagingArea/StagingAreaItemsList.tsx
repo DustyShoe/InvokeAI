@@ -3,6 +3,8 @@ import { useStore } from '@nanostores/react';
 import { logger } from 'app/logging/logger';
 import { QueueItemPreviewMini } from 'features/controlLayers/components/StagingArea/QueueItemPreviewMini';
 import { useCanvasManager } from 'features/controlLayers/contexts/CanvasManagerProviderGate';
+import { selectStagingThumbnailSize } from 'features/controlLayers/store/canvasSettingsSlice';
+import { useAppSelector } from 'app/store/storeHooks';
 import { useOverlayScrollbars } from 'overlayscrollbars-react';
 import type { CSSProperties, RefObject } from 'react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
@@ -14,11 +16,6 @@ import { useStagingAreaContext } from './context';
 import { getQueueItemElementId } from './shared';
 
 const log = logger('system');
-
-const virtuosoStyles = {
-  width: '100%',
-  height: '72px',
-} satisfies CSSProperties;
 
 /**
  * Scroll the item at the given index into view if it is not currently visible.
@@ -131,6 +128,11 @@ const useScrollableStagingArea = (rootRef: RefObject<HTMLDivElement>) => {
 
 export const StagingAreaItemsList = memo(() => {
   const canvasManager = useCanvasManager();
+  const stagingThumbnailSize = useAppSelector(selectStagingThumbnailSize);
+  const virtuosoStyles = {
+    width: '100%',
+    height: `${stagingThumbnailSize}px`,
+  } satisfies CSSProperties;
 
   const ctx = useStagingAreaContext();
   const virtuosoRef = useRef<VirtuosoHandle>(null);
