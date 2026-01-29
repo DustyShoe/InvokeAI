@@ -30,6 +30,7 @@ import { CanvasSettingsRuleOfThirdsSwitch } from 'features/controlLayers/compone
 import { CanvasSettingsSaveAllImagesToGalleryCheckbox } from 'features/controlLayers/components/Settings/CanvasSettingsSaveAllImagesToGalleryCheckbox';
 import { CanvasSettingsShowHUDSwitch } from 'features/controlLayers/components/Settings/CanvasSettingsShowHUDSwitch';
 import { CanvasSettingsShowProgressOnCanvas } from 'features/controlLayers/components/Settings/CanvasSettingsShowProgressOnCanvasSwitch';
+import { CanvasSettingsShowStagingThumbnailsRowSwitch } from 'features/controlLayers/components/Settings/CanvasSettingsShowStagingThumbnailsRowSwitch';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PiCodeFill, PiEyeFill, PiGearSixFill, PiPencilFill, PiSquaresFourFill } from 'react-icons/pi';
@@ -82,6 +83,7 @@ export const CanvasSettingsPopover = memo(() => {
                 <CanvasSettingsIsolatedLayerPreviewSwitch />
                 <CanvasSettingsBboxOverlaySwitch />
                 <CanvasSettingsShowHUDSwitch />
+                <CanvasSettingsShowStagingThumbnailsRowSwitch />
               </Flex>
 
               <Divider />

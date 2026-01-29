@@ -65,6 +65,10 @@ const zCanvasSettingsState = z.object({
    */
   showProgressOnCanvas: z.boolean(),
   /**
+   * Whether to show the staging thumbnails row.
+   */
+  showStagingThumbnailsRow: z.boolean(),
+  /**
    * Whether to show the bounding box overlay on the canvas.
    */
   bboxOverlay: z.boolean(),
@@ -125,6 +129,7 @@ const getInitialState = (): CanvasSettingsState => ({
   autoProcess: true,
   snapToGrid: true,
   showProgressOnCanvas: true,
+  showStagingThumbnailsRow: true,
   bboxOverlay: false,
   preserveMask: false,
   isolatedStagingPreview: true,
@@ -188,6 +193,9 @@ const slice = createSlice({
     settingsShowProgressOnCanvasToggled: (state) => {
       state.showProgressOnCanvas = !state.showProgressOnCanvas;
     },
+    settingsShowStagingThumbnailsRowToggled: (state) => {
+      state.showStagingThumbnailsRow = !state.showStagingThumbnailsRow;
+    },
     settingsBboxOverlayToggled: (state) => {
       state.bboxOverlay = !state.bboxOverlay;
     },
@@ -245,6 +253,7 @@ export const {
   settingsAutoProcessToggled,
   settingsSnapToGridToggled,
   settingsShowProgressOnCanvasToggled,
+  settingsShowStagingThumbnailsRowToggled,
   settingsBboxOverlayToggled,
   settingsPreserveMaskToggled,
   settingsIsolatedStagingPreviewToggled,
@@ -284,6 +293,9 @@ export const selectAutoProcess = createCanvasSettingsSelector((settings) => sett
 export const selectSnapToGrid = createCanvasSettingsSelector((settings) => settings.snapToGrid);
 export const selectShowProgressOnCanvas = createCanvasSettingsSelector(
   (canvasSettings) => canvasSettings.showProgressOnCanvas
+);
+export const selectShowStagingThumbnailsRow = createCanvasSettingsSelector(
+  (canvasSettings) => canvasSettings.showStagingThumbnailsRow
 );
 export const selectIsolatedStagingPreview = createCanvasSettingsSelector((settings) => settings.isolatedStagingPreview);
 export const selectIsolatedLayerPreview = createCanvasSettingsSelector((settings) => settings.isolatedLayerPreview);

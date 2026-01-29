@@ -130,8 +130,6 @@ const useScrollableStagingArea = (rootRef: RefObject<HTMLDivElement>) => {
 };
 
 export const StagingAreaItemsList = memo(() => {
-  const canvasManager = useCanvasManager();
-
   const ctx = useStagingAreaContext();
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const rangeRef = useRef<ListRange>({ startIndex: 0, endIndex: 0 });
@@ -140,10 +138,6 @@ export const StagingAreaItemsList = memo(() => {
   const items = useStore(ctx.$items);
 
   const scrollerRef = useScrollableStagingArea(rootRef);
-
-  useEffect(() => {
-    return canvasManager.stagingArea.connectToSession(ctx.$items, ctx.$selectedItem);
-  }, [canvasManager, ctx.$progressData, ctx.$items, ctx.$selectedItem]);
 
   useEffect(() => {
     return ctx.$selectedItemIndex.listen((selectedItemIndex) => {
@@ -167,7 +161,14 @@ export const StagingAreaItemsList = memo(() => {
   }, []);
 
   return (
-    <Box data-overlayscrollbars-initialize="" ref={rootRef} position="relative" w="full" h="full">
+    <Box
+      data-overlayscrollbars-initialize=""
+      ref={rootRef}
+      position="relative"
+      w="full"
+      h="full"
+      textAlign="center"
+    >
       <Virtuoso<S['SessionQueueItem']>
         ref={virtuosoRef}
         data={items}

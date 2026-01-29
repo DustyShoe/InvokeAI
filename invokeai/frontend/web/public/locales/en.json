@@ -2614,6 +2614,7 @@
                 "alert": "Sending new generations to Gallery, bypassing Canvas"
             },
             "isolatedStagingPreview": "Isolated Staging Preview",
+            "showStagingThumbnailsRow": "Show Preview Thumbnails",
             "isolatedPreview": "Isolated Preview",
             "isolatedLayerPreview": "Isolated Layer Preview",
             "isolatedLayerPreviewDesc": "Whether to show only this layer when performing operations like filtering or transforming.",
