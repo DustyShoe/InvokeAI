@@ -1,5 +1,6 @@
 import { Badge, Box, Flex, IconButton, Progress, Text, Tooltip } from '@invoke-ai/ui-library';
 import { isNil } from 'es-toolkit/compat';
+import { getApiErrorDetail } from 'features/modelManagerV2/util/getApiErrorDetail';
 import { toast } from 'features/toast/toast';
 import { t } from 'i18next';
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
@@ -52,13 +53,11 @@ export const ModelInstallQueueItem = memo((props: ModelListItemProps) => {
         });
       })
       .catch((error) => {
-        if (error) {
-          toast({
-            id: 'MODEL_INSTALL_CANCEL_FAILED',
-            title: `${error.data.detail} `,
-            status: 'error',
-          });
-        }
+        toast({
+          id: 'MODEL_INSTALL_CANCEL_FAILED',
+          title: getApiErrorDetail(error),
+          status: 'error',
+        });
       });
   }, [deleteImportModel, installJob]);
 
@@ -73,13 +72,11 @@ export const ModelInstallQueueItem = memo((props: ModelListItemProps) => {
         });
       })
       .catch((error) => {
-        if (error) {
-          toast({
-            id: 'MODEL_INSTALL_PAUSE_FAILED',
-            title: `${error.data.detail} `,
-            status: 'error',
-          });
-        }
+        toast({
+          id: 'MODEL_INSTALL_PAUSE_FAILED',
+          title: getApiErrorDetail(error),
+          status: 'error',
+        });
       });
   }, [installJob, pauseModelInstall]);
 
@@ -113,13 +110,11 @@ export const ModelInstallQueueItem = memo((props: ModelListItemProps) => {
         });
       })
       .catch((error) => {
-        if (error) {
-          toast({
-            id: 'MODEL_INSTALL_RESUME_FAILED',
-            title: `${error.data.detail} `,
-            status: 'error',
-          });
-        }
+        toast({
+          id: 'MODEL_INSTALL_RESUME_FAILED',
+          title: getApiErrorDetail(error),
+          status: 'error',
+        });
       });
   }, [hasRestartedFromScratch, installJob, resumeModelInstall]);
 
@@ -134,13 +129,11 @@ export const ModelInstallQueueItem = memo((props: ModelListItemProps) => {
         });
       })
       .catch((error) => {
-        if (error) {
-          toast({
-            id: 'MODEL_INSTALL_RESTART_FAILED_ERROR',
-            title: `${error.data.detail} `,
-            status: 'error',
-          });
-        }
+        toast({
+          id: 'MODEL_INSTALL_RESTART_FAILED_ERROR',
+          title: getApiErrorDetail(error),
+          status: 'error',
+        });
       });
   }, [installJob.id, restartFailedModelInstall]);
 
@@ -156,13 +149,11 @@ export const ModelInstallQueueItem = memo((props: ModelListItemProps) => {
           });
         })
         .catch((error) => {
-          if (error) {
-            toast({
-              id: 'MODEL_INSTALL_RESTART_FILE_ERROR',
-              title: `${error.data.detail} `,
-              status: 'error',
-            });
-          }
+          toast({
+            id: 'MODEL_INSTALL_RESTART_FILE_ERROR',
+            title: getApiErrorDetail(error),
+            status: 'error',
+          });
         });
     },
     [installJob.id, restartModelInstallFile]
