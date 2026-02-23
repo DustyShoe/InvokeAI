@@ -83,6 +83,23 @@ const computeItemKey: GridComputeItemKey<string, GridContext> = (index, imageNam
   return `${JSON.stringify(queryArgs)}-${imageName ?? index}`;
 };
 
+const canHandleGridArrowNavigation = (
+  activeTab: ReturnType<typeof selectActiveTab>,
+  focusedRegion: ReturnType<typeof getFocusedRegion>
+) => {
+  if (navigationApi.isViewerArrowNavigationMode(activeTab)) {
+    // When gallery is not effectively available, viewer hotkeys own left/right navigation.
+    return false;
+  }
+
+  if (focusedRegion === 'gallery' || focusedRegion === 'viewer') {
+    return true;
+  }
+
+  // Fallback for tab-switch edge case: allow nav when viewer dock tab is active before first click.
+  return navigationApi.isDockviewPanelActive(activeTab, VIEWER_PANEL_ID);
+};
+
 /**
  * Handles keyboard navigation for the gallery.
  */
@@ -96,18 +113,11 @@ const useKeyboardNavigation = (
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
-      if (navigationApi.isViewerArrowNavigationMode(activeTab)) {
-        // When gallery is not effectively available, viewer hotkeys own left/right navigation.
+      const focusedRegion = getFocusedRegion();
+      if (!canHandleGridArrowNavigation(activeTab, focusedRegion)) {
         return;
       }
 
-      const focusedRegion = getFocusedRegion();
-      const isFocusRegionEligible = focusedRegion === 'gallery' || focusedRegion === 'viewer';
-      const isViewerDockTabActive = navigationApi.isDockviewPanelActive(activeTab, VIEWER_PANEL_ID);
-      if (!isFocusRegionEligible && !isViewerDockTabActive) {
-        // Fallback for tab-switch edge case: allow nav when viewer dock tab is active before first click.
-        return;
-      }
       // Only handle arrow keys
       if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
         return;

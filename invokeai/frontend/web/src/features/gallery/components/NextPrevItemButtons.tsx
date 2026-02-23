@@ -1,12 +1,24 @@
 import type { ChakraProps } from '@invoke-ai/ui-library';
 import { Box, IconButton } from '@invoke-ai/ui-library';
-import { memo } from 'react';
+import { memo, type MouseEvent, type PointerEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PiCaretLeftBold, PiCaretRightBold } from 'react-icons/pi';
 
 import { useNextPrevItemNavigation } from './useNextPrevItemNavigation';
 
 const ARROW_SIZE = 48;
+
+const preventButtonFocusOnPointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+  event.preventDefault();
+};
+
+const preventButtonFocusOnMouseDown = (event: MouseEvent<HTMLButtonElement>) => {
+  event.preventDefault();
+};
+
+const blurButtonOnPointerUp = (event: PointerEvent<HTMLButtonElement>) => {
+  event.currentTarget.blur();
+};
 
 const NextPrevItemButtons = ({ inset = 8 }: { inset?: ChakraProps['insetInlineStart' | 'insetInlineEnd'] }) => {
   const { t } = useTranslation();
@@ -28,6 +40,9 @@ const NextPrevItemButtons = ({ inset = 8 }: { inset?: ChakraProps['insetInlineSt
           w={`${ARROW_SIZE}px`}
           h={`${ARROW_SIZE}px`}
           onClick={goToPreviousImage}
+          onPointerDown={preventButtonFocusOnPointerDown}
+          onMouseDown={preventButtonFocusOnMouseDown}
+          onPointerUp={blurButtonOnPointerUp}
           isDisabled={isFetching}
           color="base.100"
           pointerEvents="auto"
@@ -48,6 +63,9 @@ const NextPrevItemButtons = ({ inset = 8 }: { inset?: ChakraProps['insetInlineSt
           w={`${ARROW_SIZE}px`}
           h={`${ARROW_SIZE}px`}
           onClick={goToNextImage}
+          onPointerDown={preventButtonFocusOnPointerDown}
+          onMouseDown={preventButtonFocusOnMouseDown}
+          onPointerUp={blurButtonOnPointerUp}
           isDisabled={isFetching}
           color="base.100"
           pointerEvents="auto"

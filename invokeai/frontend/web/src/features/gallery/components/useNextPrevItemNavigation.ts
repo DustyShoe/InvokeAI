@@ -11,34 +11,37 @@ export const useNextPrevItemNavigation = () => {
   const lastSelectedItem = useAppSelector(selectLastSelectedItem);
   const { imageNames, isFetching } = useGalleryImageNames();
 
-  const isOnFirstItem = useMemo(
-    () => (lastSelectedItem ? imageNames.at(0) === lastSelectedItem : false),
+  const currentIndex = useMemo(
+    () => (lastSelectedItem ? imageNames.findIndex((n) => n === lastSelectedItem) : -1),
     [imageNames, lastSelectedItem]
   );
-  const isOnLastItem = useMemo(
-    () => (lastSelectedItem ? imageNames.at(-1) === lastSelectedItem : false),
-    [imageNames, lastSelectedItem]
+  const isOnFirstItem = currentIndex === 0;
+  const isOnLastItem = currentIndex >= 0 && currentIndex === imageNames.length - 1;
+
+  const navigateBy = useCallback(
+    (delta: number) => {
+      const maxIndex = imageNames.length - 1;
+      if (maxIndex < 0) {
+        return;
+      }
+
+      const targetIndex = currentIndex >= 0 ? clamp(currentIndex + delta, 0, maxIndex) : 0;
+      const imageName = imageNames[targetIndex];
+      if (!imageName) {
+        return;
+      }
+      dispatch(imageSelected(imageName));
+    },
+    [currentIndex, dispatch, imageNames]
   );
 
   const goToPreviousImage = useCallback(() => {
-    const targetIndex = lastSelectedItem ? imageNames.findIndex((n) => n === lastSelectedItem) - 1 : 0;
-    const clampedIndex = clamp(targetIndex, 0, imageNames.length - 1);
-    const imageName = imageNames.at(clampedIndex);
-    if (!imageName) {
-      return;
-    }
-    dispatch(imageSelected(imageName));
-  }, [dispatch, imageNames, lastSelectedItem]);
+    navigateBy(-1);
+  }, [navigateBy]);
 
   const goToNextImage = useCallback(() => {
-    const targetIndex = lastSelectedItem ? imageNames.findIndex((n) => n === lastSelectedItem) + 1 : 0;
-    const clampedIndex = clamp(targetIndex, 0, imageNames.length - 1);
-    const imageName = imageNames.at(clampedIndex);
-    if (!imageName) {
-      return;
-    }
-    dispatch(imageSelected(imageName));
-  }, [dispatch, imageNames, lastSelectedItem]);
+    navigateBy(1);
+  }, [navigateBy]);
 
   return { goToPreviousImage, goToNextImage, isOnFirstItem, isOnLastItem, isFetching };
 };

@@ -6,6 +6,7 @@ import { DndImage } from 'features/dnd/DndImage';
 import ImageMetadataViewer from 'features/gallery/components/ImageMetadataViewer/ImageMetadataViewer';
 import NextPrevItemButtons from 'features/gallery/components/NextPrevItemButtons';
 import { useNextPrevItemNavigation } from 'features/gallery/components/useNextPrevItemNavigation';
+import { selectLastSelectedItem } from 'features/gallery/store/gallerySelectors';
 import { useRegisteredHotkeys } from 'features/system/components/HotkeysModal/useHotkeyData';
 import { navigationApi } from 'features/ui/layouts/navigation-api';
 import {
@@ -15,7 +16,7 @@ import {
 } from 'features/ui/store/uiSelectors';
 import type { AnimationProps } from 'framer-motion';
 import { AnimatePresence, motion } from 'framer-motion';
-import { memo, useCallback, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import type { ImageDTO } from 'services/api/types';
 
 import { useImageViewerContext } from './context';
@@ -25,12 +26,55 @@ import { ProgressIndicator } from './ProgressIndicator2';
 
 export const CurrentImagePreview = memo(({ imageDTO }: { imageDTO: ImageDTO | null }) => {
   const activeTab = useAppSelector(selectActiveTab);
+  const selectedImageName = useAppSelector(selectLastSelectedItem);
   const shouldShowItemDetails = useAppSelector(selectShouldShowItemDetails);
   const shouldShowProgressInViewer = useAppSelector(selectShouldShowProgressInViewer);
   const { goToPreviousImage, goToNextImage, isFetching } = useNextPrevItemNavigation();
   const { onLoadImage, $progressEvent, $progressImage } = useImageViewerContext();
   const progressEvent = useStore($progressEvent);
   const progressImage = useStore($progressImage);
+  const [imageToRender, setImageToRender] = useState<ImageDTO | null>(null);
+
+  useEffect(() => {
+    if (!selectedImageName) {
+      setImageToRender(null);
+      return;
+    }
+
+    if (!imageDTO || imageToRender?.image_name === imageDTO.image_name) {
+      return;
+    }
+
+    let canceled = false;
+
+    const onReady = () => {
+      if (canceled) {
+        return;
+      }
+      setImageToRender(imageDTO);
+    };
+
+    if (typeof window === 'undefined') {
+      onReady();
+      return;
+    }
+
+    const preloader = new window.Image();
+
+    preloader.onload = onReady;
+    preloader.onerror = onReady;
+    preloader.src = imageDTO.image_url;
+
+    if (preloader.complete) {
+      onReady();
+    }
+
+    return () => {
+      canceled = true;
+      preloader.onload = null;
+      preloader.onerror = null;
+    };
+  }, [imageDTO, imageToRender?.image_name, selectedImageName]);
 
   // Show and hide the next/prev buttons on mouse move
   const [shouldShowNextPrevButtons, setShouldShowNextPrevButtons] = useState<boolean>(false);
@@ -45,32 +89,32 @@ export const CurrentImagePreview = memo(({ imageDTO }: { imageDTO: ImageDTO | nu
     }, 500);
   }, []);
 
-  const onHotkeyPrevImage = useCallback(
-    (event: KeyboardEvent) => {
-      if (!navigationApi.isViewerArrowNavigationMode(activeTab) || !imageDTO || isFetching) {
+  const handleViewerArrowNavigation = useCallback(
+    (event: KeyboardEvent, navigate: () => void) => {
+      if (!navigationApi.isViewerArrowNavigationMode(activeTab) || !imageToRender || isFetching) {
         return;
       }
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
         return;
       }
       event.preventDefault();
-      goToPreviousImage();
+      navigate();
     },
-    [activeTab, goToPreviousImage, imageDTO, isFetching]
+    [activeTab, imageToRender, isFetching]
+  );
+
+  const onHotkeyPrevImage = useCallback(
+    (event: KeyboardEvent) => {
+      handleViewerArrowNavigation(event, goToPreviousImage);
+    },
+    [goToPreviousImage, handleViewerArrowNavigation]
   );
 
   const onHotkeyNextImage = useCallback(
     (event: KeyboardEvent) => {
-      if (!navigationApi.isViewerArrowNavigationMode(activeTab) || !imageDTO || isFetching) {
-        return;
-      }
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
-        return;
-      }
-      event.preventDefault();
-      goToNextImage();
+      handleViewerArrowNavigation(event, goToNextImage);
     },
-    [activeTab, goToNextImage, imageDTO, isFetching]
+    [goToNextImage, handleViewerArrowNavigation]
   );
 
   useRegisteredHotkeys({
@@ -101,19 +145,12 @@ export const CurrentImagePreview = memo(({ imageDTO }: { imageDTO: ImageDTO | nu
       justifyContent="center"
       position="relative"
     >
-      {imageDTO && (
-        <Flex
-          key={imageDTO.image_name}
-          w="full"
-          h="full"
-          position="absolute"
-          alignItems="center"
-          justifyContent="center"
-        >
-          <DndImage imageDTO={imageDTO} onLoad={onLoadImage} borderRadius="base" />
+      {imageToRender && (
+        <Flex w="full" h="full" position="absolute" alignItems="center" justifyContent="center">
+          <DndImage imageDTO={imageToRender} onLoad={onLoadImage} borderRadius="base" />
         </Flex>
       )}
-      {!imageDTO && <NoContentForViewer />}
+      {!imageToRender && <NoContentForViewer />}
       {withProgress && (
         <Flex w="full" h="full" position="absolute" alignItems="center" justifyContent="center" bg="base.900">
           <ProgressImage progressImage={progressImage} />
@@ -125,13 +162,13 @@ export const CurrentImagePreview = memo(({ imageDTO }: { imageDTO: ImageDTO | nu
       <Flex flexDir="column" gap={2} position="absolute" top={0} insetInlineStart={0} alignItems="flex-start">
         <CanvasAlertsInvocationProgress />
       </Flex>
-      {shouldShowItemDetails && imageDTO && !withProgress && (
+      {shouldShowItemDetails && imageToRender && !withProgress && (
         <Box position="absolute" opacity={0.8} top={0} width="full" height="full" borderRadius="base">
-          <ImageMetadataViewer image={imageDTO} />
+          <ImageMetadataViewer image={imageToRender} />
         </Box>
       )}
       <AnimatePresence>
-        {shouldShowNextPrevButtons && imageDTO && (
+        {shouldShowNextPrevButtons && imageToRender && (
           <Box
             as={motion.div}
             key="nextPrevButtons"

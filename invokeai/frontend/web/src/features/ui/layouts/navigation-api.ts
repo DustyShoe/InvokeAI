@@ -24,6 +24,9 @@ const log = logger('system');
 
 type PanelType = IGridviewPanel | IDockviewPanel;
 type PanelWithFocusRegion = { params?: { focusRegion?: FocusRegionName } };
+type FocusPanelOptions = {
+  blurActiveElement?: boolean;
+};
 
 /**
  * An object that represents a promise that is waiting for a panel to be registered and ready.
@@ -89,6 +92,23 @@ export class NavigationApi {
    * This is used to clean up resources when a tab is unregistered.
    */
   _disposablesForTab: Map<TabName, Set<() => void>> = new Map();
+
+  _setFocusedRegionFromPanel = (tab: TabName, panel: PanelType | null | undefined): void => {
+    const focusRegion = (panel as PanelWithFocusRegion | null)?.params?.focusRegion;
+    if (focusRegion && this._app?.activeTab.get() === tab) {
+      setFocusedRegion(focusRegion);
+    }
+  };
+
+  _blurActiveElement = (): void => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    if (!(document.activeElement instanceof HTMLElement)) {
+      return;
+    }
+    document.activeElement.blur();
+  };
 
   /**
    * Convenience method to add a dispose function for a specific tab.
@@ -257,18 +277,12 @@ export class NavigationApi {
     if (api instanceof DockviewApi) {
       this._currentActiveDockviewPanel.set(tab, api.activePanel?.id ?? null);
       this._prevActiveDockviewPanel.set(tab, null);
-      const initialFocusRegion = (api.activePanel as PanelWithFocusRegion | null)?.params?.focusRegion;
-      if (initialFocusRegion && this._app?.activeTab.get() === tab) {
-        setFocusedRegion(initialFocusRegion);
-      }
+      this._setFocusedRegionFromPanel(tab, api.activePanel);
       const { dispose } = api.onDidActivePanelChange((panel) => {
         const previousPanelId = this._currentActiveDockviewPanel.get(tab);
         this._prevActiveDockviewPanel.set(tab, previousPanelId ?? null);
         this._currentActiveDockviewPanel.set(tab, panel?.id ?? null);
-        const focusRegion = (panel as PanelWithFocusRegion | null)?.params?.focusRegion;
-        if (focusRegion && this._app?.activeTab.get() === tab) {
-          setFocusedRegion(focusRegion);
-        }
+        this._setFocusedRegionFromPanel(tab, panel);
       });
       this._addDisposeForTab(tab, dispose);
     }
@@ -386,7 +400,7 @@ export class NavigationApi {
    * }
    * ```
    */
-  focusPanel = async (tab: TabName, panelId: string, timeout = 2000): Promise<boolean> => {
+  focusPanel = async (tab: TabName, panelId: string, timeout = 2000, options?: FocusPanelOptions): Promise<boolean> => {
     try {
       this.switchToTab(tab);
       await this.waitForPanel(tab, panelId, timeout);
@@ -401,6 +415,10 @@ export class NavigationApi {
 
       // Dockview uses the term "active", but we use "focused" for consistency.
       panel.api.setActive();
+      if (options?.blurActiveElement) {
+        this._blurActiveElement();
+      }
+      this._setFocusedRegionFromPanel(tab, panel);
       log.trace(`Focused panel ${key}`);
 
       return true;
