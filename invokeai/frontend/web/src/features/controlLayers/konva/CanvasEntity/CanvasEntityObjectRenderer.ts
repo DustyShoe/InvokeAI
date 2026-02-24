@@ -10,6 +10,7 @@ import { CanvasObjectEraserLine } from 'features/controlLayers/konva/CanvasObjec
 import { CanvasObjectEraserLineWithPressure } from 'features/controlLayers/konva/CanvasObject/CanvasObjectEraserLineWithPressure';
 import { CanvasObjectGradient } from 'features/controlLayers/konva/CanvasObject/CanvasObjectGradient';
 import { CanvasObjectImage } from 'features/controlLayers/konva/CanvasObject/CanvasObjectImage';
+import { CanvasObjectLasso } from 'features/controlLayers/konva/CanvasObject/CanvasObjectLasso';
 import { CanvasObjectRect } from 'features/controlLayers/konva/CanvasObject/CanvasObjectRect';
 import type { AnyObjectRenderer, AnyObjectState } from 'features/controlLayers/konva/CanvasObject/types';
 import { LightnessToAlphaFilter } from 'features/controlLayers/konva/filters';
@@ -397,6 +398,16 @@ export class CanvasEntityObjectRenderer extends CanvasModuleBase {
 
       if (!renderer) {
         renderer = new CanvasObjectRect(objectState, this);
+        this.renderers.set(renderer.id, renderer);
+        this.konva.objectGroup.add(renderer.konva.group);
+      }
+
+      didRender = renderer.update(objectState, force || isFirstRender);
+    } else if (objectState.type === 'lasso') {
+      assert(renderer instanceof CanvasObjectLasso || !renderer);
+
+      if (!renderer) {
+        renderer = new CanvasObjectLasso(objectState, this);
         this.renderers.set(renderer.id, renderer);
         this.konva.objectGroup.add(renderer.konva.group);
       }

@@ -66,6 +66,7 @@ import type {
   EntityEraserLineAddedPayload,
   EntityGradientAddedPayload,
   EntityIdentifierPayload,
+  EntityLassoAddedPayload,
   EntityMovedToPayload,
   EntityRasterizedPayload,
   EntityRectAddedPayload,
@@ -1548,6 +1549,17 @@ const slice = createSlice({
       // re-render it (reference equality check). I don't like this behaviour.
       entity.objects.push({ ...rect });
     },
+    entityLassoAdded: (state, action: PayloadAction<EntityLassoAddedPayload>) => {
+      const { entityIdentifier, lasso } = action.payload;
+      const entity = selectEntity(state, entityIdentifier);
+      if (!entity) {
+        return;
+      }
+
+      // TODO(psyche): If we add the object without splatting, the renderer will see it as the same object and not
+      // re-render it (reference equality check). I don't like this behaviour.
+      entity.objects.push({ ...lasso });
+    },
     entityGradientAdded: (state, action: PayloadAction<EntityGradientAddedPayload>) => {
       const { entityIdentifier, gradient } = action.payload;
       const entity = selectEntity(state, entityIdentifier);
@@ -1787,6 +1799,7 @@ export const {
   entityBrushLineAdded,
   entityEraserLineAdded,
   entityRectAdded,
+  entityLassoAdded,
   entityGradientAdded,
   // Raster layer adjustments
   rasterLayerAdjustmentsSet,
@@ -1913,7 +1926,13 @@ export const canvasSliceConfig: SliceConfig<typeof slice> = {
   },
 };
 
-const doNotGroupMatcher = isAnyOf(entityBrushLineAdded, entityEraserLineAdded, entityRectAdded, entityGradientAdded);
+const doNotGroupMatcher = isAnyOf(
+  entityBrushLineAdded,
+  entityEraserLineAdded,
+  entityRectAdded,
+  entityLassoAdded,
+  entityGradientAdded
+);
 
 // Store rapid actions of the same type at most once every x time.
 // See: https://github.com/omnidan/redux-undo/blob/master/examples/throttled-drag/util/undoFilter.js
