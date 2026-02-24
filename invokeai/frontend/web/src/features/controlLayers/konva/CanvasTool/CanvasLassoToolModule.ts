@@ -546,7 +546,9 @@ export class CanvasLassoToolModule extends CanvasModuleBase {
 
     const selectedEntityIdentifier = canvasState.selectedEntityIdentifier;
     if (selectedEntityIdentifier?.type === 'inpaint_mask') {
-      const selectedMask = canvasState.inpaintMasks.entities.find((entity) => entity.id === selectedEntityIdentifier.id);
+      const selectedMask = canvasState.inpaintMasks.entities.find(
+        (entity) => entity.id === selectedEntityIdentifier.id
+      );
       if (selectedMask?.isEnabled) {
         return selectedMask.id;
       }
