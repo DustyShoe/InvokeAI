@@ -448,17 +448,21 @@ export class CanvasEntityObjectRenderer extends CanvasModuleBase {
    * these visually transparent shapes in its calculation:
    *
    * - Eraser lines, which are normal lines with a globalCompositeOperation of 'destination-out'.
+   * - Subtracting lasso shapes, which use a globalCompositeOperation of 'destination-out'.
    * - Clipped portions of any shape.
    * - Images, which may have transparent areas.
    */
   needsPixelBbox = (): boolean => {
     let needsPixelBbox = false;
     for (const renderer of this.renderers.values()) {
-      const isEraserLine = renderer instanceof CanvasObjectEraserLine;
+      const isEraserLine =
+        renderer instanceof CanvasObjectEraserLine || renderer instanceof CanvasObjectEraserLineWithPressure;
+      const isSubtractingLasso =
+        renderer instanceof CanvasObjectLasso && renderer.state.compositeOperation === 'destination-out';
       const isImage = renderer instanceof CanvasObjectImage;
       const imageIgnoresTransparency = isImage && renderer.state.usePixelBbox === false;
       const hasClip = renderer instanceof CanvasObjectBrushLine && renderer.state.clip;
-      if (isEraserLine || hasClip || (isImage && !imageIgnoresTransparency)) {
+      if (isEraserLine || isSubtractingLasso || hasClip || (isImage && !imageIgnoresTransparency)) {
         needsPixelBbox = true;
         break;
       }

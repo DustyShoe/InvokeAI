@@ -100,6 +100,12 @@ import {
   makeDefaultRasterLayerAdjustments,
 } from './util';
 
+const resetInpaintMasksHiddenIfEmpty = (state: CanvasState) => {
+  if (state.inpaintMasks.entities.length === 0) {
+    state.inpaintMasks.isHidden = false;
+  }
+};
+
 const slice = createSlice({
   name: 'canvas',
   initialState: getInitialCanvasState(),
@@ -1062,6 +1068,7 @@ const slice = createSlice({
             (entity) => !mergedEntitiesToDelete.includes(entity.id)
           );
         }
+        resetInpaintMasksHiddenIfEmpty(state);
         const entityIdentifier = getEntityIdentifier(entityState);
 
         if (isSelected || mergedEntitiesToDelete.length > 0) {
@@ -1133,6 +1140,7 @@ const slice = createSlice({
         if (replace) {
           // Remove the inpaint mask
           state.inpaintMasks.entities = state.inpaintMasks.entities.filter((layer) => layer.id !== entityIdentifier.id);
+          resetInpaintMasksHiddenIfEmpty(state);
         }
 
         // Add the new regional guidance
@@ -1602,6 +1610,7 @@ const slice = createSlice({
           break;
       }
 
+      resetInpaintMasksHiddenIfEmpty(state);
       state.selectedEntityIdentifier = selectedEntityIdentifier;
     },
     entityArrangedForwardOne: (state, action: PayloadAction<EntityIdentifierPayload>) => {
@@ -1690,6 +1699,7 @@ const slice = createSlice({
           break;
         case 'inpaint_mask':
           state.inpaintMasks.isHidden = !state.inpaintMasks.isHidden;
+          resetInpaintMasksHiddenIfEmpty(state);
           break;
         case 'regional_guidance':
           state.regionalGuidance.isHidden = !state.regionalGuidance.isHidden;
@@ -1698,13 +1708,16 @@ const slice = createSlice({
     },
     allNonRasterLayersIsHiddenToggled: (state) => {
       const hasVisibleNonRasterLayers =
-        !state.controlLayers.isHidden || !state.inpaintMasks.isHidden || !state.regionalGuidance.isHidden;
+        (state.controlLayers.entities.length > 0 && !state.controlLayers.isHidden) ||
+        (state.inpaintMasks.entities.length > 0 && !state.inpaintMasks.isHidden) ||
+        (state.regionalGuidance.entities.length > 0 && !state.regionalGuidance.isHidden);
 
       const shouldHide = hasVisibleNonRasterLayers;
 
       state.controlLayers.isHidden = shouldHide;
       state.inpaintMasks.isHidden = shouldHide;
       state.regionalGuidance.isHidden = shouldHide;
+      resetInpaintMasksHiddenIfEmpty(state);
     },
     allEntitiesDeleted: (state) => {
       // Deleting all entities is equivalent to resetting the state for each entity type
@@ -1720,6 +1733,7 @@ const slice = createSlice({
       state.inpaintMasks.entities = inpaintMasks;
       state.rasterLayers.entities = rasterLayers;
       state.regionalGuidance.entities = regionalGuidance;
+      resetInpaintMasksHiddenIfEmpty(state);
       return state;
     },
     canvasUndo: () => {},

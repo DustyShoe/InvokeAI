@@ -4,6 +4,7 @@ import { CanvasModuleBase } from 'features/controlLayers/konva/CanvasModuleBase'
 import type { CanvasToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasToolModule';
 import { getPrefixedId, isDistanceMoreThanMin, offsetCoord } from 'features/controlLayers/konva/util';
 import type { Coordinate } from 'features/controlLayers/store/types';
+import { simplifyFlatNumbersArray } from 'features/controlLayers/util/simplify';
 import Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type { Logger } from 'roarr';
@@ -14,8 +15,12 @@ type CanvasLassoToolModuleConfig = {
   PREVIEW_STROKE_WIDTH_PX: number;
   START_POINT_RADIUS_PX: number;
   START_POINT_STROKE_WIDTH_PX: number;
+  START_POINT_HOVER_RADIUS_DELTA_PX: number;
   POLYGON_CLOSE_RADIUS_PX: number;
   MIN_FREEHAND_POINT_DISTANCE_PX: number;
+  MAX_FREEHAND_SEGMENT_LENGTH_PX: number;
+  FREEHAND_SIMPLIFY_MIN_POINTS: number;
+  FREEHAND_SIMPLIFY_TOLERANCE: number;
 };
 
 const DEFAULT_CONFIG: CanvasLassoToolModuleConfig = {
@@ -24,8 +29,12 @@ const DEFAULT_CONFIG: CanvasLassoToolModuleConfig = {
   PREVIEW_STROKE_WIDTH_PX: 1.5,
   START_POINT_RADIUS_PX: 4,
   START_POINT_STROKE_WIDTH_PX: 2,
+  START_POINT_HOVER_RADIUS_DELTA_PX: 2,
   POLYGON_CLOSE_RADIUS_PX: 10,
   MIN_FREEHAND_POINT_DISTANCE_PX: 1,
+  MAX_FREEHAND_SEGMENT_LENGTH_PX: 2,
+  FREEHAND_SIMPLIFY_MIN_POINTS: 200,
+  FREEHAND_SIMPLIFY_TOLERANCE: 0.6,
 };
 
 export class CanvasLassoToolModule extends CanvasModuleBase {
@@ -202,7 +211,7 @@ export class CanvasLassoToolModule extends CanvasModuleBase {
       return;
     }
 
-    this.commitContour(this.freehandPoints);
+    this.commitContour(this.freehandPoints, true);
     this.reset();
   };
 
@@ -212,7 +221,7 @@ export class CanvasLassoToolModule extends CanvasModuleBase {
       return;
     }
 
-    this.commitContour(this.freehandPoints);
+    this.commitContour(this.freehandPoints, true);
     this.reset();
   };
 
@@ -243,7 +252,7 @@ export class CanvasLassoToolModule extends CanvasModuleBase {
       if (!isDistanceMoreThanMin(point, lastPoint, minDistance)) {
         return;
       }
-      this.freehandPoints = [...this.freehandPoints, point];
+      this.appendFreehandPoint(point);
       this.syncPreview();
       return;
     }
@@ -251,6 +260,33 @@ export class CanvasLassoToolModule extends CanvasModuleBase {
     if (this.polygonPoints.length > 0) {
       this.polygonPointer = this.getPolygonPoint(point, shouldSnap);
       this.syncPreview();
+    }
+  };
+
+  private appendFreehandPoint = (point: Coordinate) => {
+    const lastPoint = this.freehandPoints.at(-1) ?? null;
+    if (!lastPoint) {
+      this.freehandPoints.push(point);
+      return;
+    }
+
+    const maxSegmentLength = this.manager.stage.unscale(this.config.MAX_FREEHAND_SEGMENT_LENGTH_PX);
+    const dx = point.x - lastPoint.x;
+    const dy = point.y - lastPoint.y;
+    const distance = Math.hypot(dx, dy);
+
+    if (distance <= maxSegmentLength) {
+      this.freehandPoints.push(point);
+      return;
+    }
+
+    const steps = Math.ceil(distance / maxSegmentLength);
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      this.freehandPoints.push({
+        x: lastPoint.x + dx * t,
+        y: lastPoint.y + dy * t,
+      });
     }
   };
 
@@ -299,10 +335,14 @@ export class CanvasLassoToolModule extends CanvasModuleBase {
     if (lassoMode === 'polygon' && this.polygonPoints.length > 0) {
       const startPoint = this.polygonPoints[0];
       if (startPoint) {
+        const isHoveringStartPoint = this.getIsHoveringStartPoint(startPoint);
+        const baseRadius = this.manager.stage.unscale(this.config.START_POINT_RADIUS_PX);
         this.konva.startPointIndicator.setAttrs({
           x: startPoint.x,
           y: startPoint.y,
-          radius: this.manager.stage.unscale(this.config.START_POINT_RADIUS_PX),
+          radius:
+            baseRadius +
+            (isHoveringStartPoint ? this.manager.stage.unscale(this.config.START_POINT_HOVER_RADIUS_DELTA_PX) : 0),
           strokeWidth: this.manager.stage.unscale(this.config.START_POINT_STROKE_WIDTH_PX),
           visible: true,
         });
@@ -314,6 +354,19 @@ export class CanvasLassoToolModule extends CanvasModuleBase {
 
   private getPolygonCloseRadius = (): number => {
     return this.manager.stage.unscale(this.config.POLYGON_CLOSE_RADIUS_PX);
+  };
+
+  private getIsHoveringStartPoint = (startPoint: Coordinate): boolean => {
+    if (this.polygonPoints.length < 3) {
+      return false;
+    }
+
+    const pointerPoint = this.parent.$cursorPos.get()?.relative;
+    if (!pointerPoint) {
+      return false;
+    }
+
+    return Math.hypot(pointerPoint.x - startPoint.x, pointerPoint.y - startPoint.y) <= this.getPolygonCloseRadius();
   };
 
   private getPolygonPoint = (point: Coordinate, shouldSnap: boolean): Coordinate => {
@@ -338,10 +391,46 @@ export class CanvasLassoToolModule extends CanvasModuleBase {
     const angle = Math.atan2(dy, dx);
     const snappedAngle = Math.round(angle / SNAP_ANGLE) * SNAP_ANGLE;
 
-    return {
+    const snappedPoint = {
       x: lastPoint.x + Math.cos(snappedAngle) * distance,
       y: lastPoint.y + Math.sin(snappedAngle) * distance,
     };
+
+    return this.alignPointToStart(snappedPoint);
+  };
+
+  private alignPointToStart = (point: Coordinate): Coordinate => {
+    if (this.polygonPoints.length < 2) {
+      return point;
+    }
+
+    const startPoint = this.polygonPoints[0];
+    if (!startPoint) {
+      return point;
+    }
+
+    const alignThreshold = this.getPolygonCloseRadius();
+    const deltaX = Math.abs(point.x - startPoint.x);
+    const deltaY = Math.abs(point.y - startPoint.y);
+    const canAlignX = deltaX <= alignThreshold;
+    const canAlignY = deltaY <= alignThreshold;
+
+    if (!canAlignX && !canAlignY) {
+      return point;
+    }
+
+    if (canAlignX && canAlignY) {
+      if (deltaX <= deltaY) {
+        return { x: startPoint.x, y: point.y };
+      }
+      return { x: point.x, y: startPoint.y };
+    }
+
+    if (canAlignX) {
+      return { x: startPoint.x, y: point.y };
+    }
+
+    return { x: point.x, y: startPoint.y };
   };
 
   private closeContour = (points: Coordinate[]): Coordinate[] => {
@@ -362,12 +451,18 @@ export class CanvasLassoToolModule extends CanvasModuleBase {
     return [...points, start];
   };
 
-  private commitContour = (points: Coordinate[]) => {
-    if (points.length < 3) {
+  private commitContour = (points: Coordinate[], simplifyFreehand: boolean = false) => {
+    const canvasState = this.manager.stateApi.getCanvasState();
+    if (canvasState.inpaintMasks.isHidden) {
       return;
     }
 
-    const closedPoints = this.closeContour(points);
+    const contourPoints = simplifyFreehand ? this.simplifyFreehandContour(points) : points;
+    if (contourPoints.length < 3) {
+      return;
+    }
+
+    const closedPoints = this.closeContour(contourPoints);
     if (closedPoints.length < 4) {
       return;
     }
@@ -382,7 +477,9 @@ export class CanvasLassoToolModule extends CanvasModuleBase {
       return;
     }
 
-    const targetMaskState = this.manager.stateApi.getInpaintMasksState().entities.find((entity) => entity.id === targetMaskId);
+    const targetMaskState = this.manager.stateApi
+      .getInpaintMasksState()
+      .entities.find((entity) => entity.id === targetMaskId);
     if (!targetMaskState) {
       return;
     }
@@ -398,19 +495,67 @@ export class CanvasLassoToolModule extends CanvasModuleBase {
         id: getPrefixedId('lasso'),
         type: 'lasso',
         points: normalizedPoints,
-        compositeOperation: this.manager.stateApi.$altKey.get() ? 'destination-out' : 'source-over',
+        compositeOperation:
+          this.manager.stateApi.$ctrlKey.get() || this.manager.stateApi.$metaKey.get()
+            ? 'destination-out'
+            : 'source-over',
       },
     });
   };
 
-  private getActiveInpaintMaskId = (): string | null => {
-    const selectedEntityIdentifier = this.manager.stateApi.getCanvasState().selectedEntityIdentifier;
-    if (selectedEntityIdentifier?.type === 'inpaint_mask') {
-      return selectedEntityIdentifier.id;
+  private simplifyFreehandContour = (points: Coordinate[]): Coordinate[] => {
+    if (points.length < this.config.FREEHAND_SIMPLIFY_MIN_POINTS) {
+      return points;
     }
 
-    const inpaintMasks = this.manager.stateApi.getInpaintMasksState().entities;
-    const activeMask = inpaintMasks.at(-1);
+    const flatPoints = points.flatMap((point) => [point.x, point.y]);
+    const simplifiedFlatPoints = simplifyFlatNumbersArray(flatPoints, {
+      tolerance: this.config.FREEHAND_SIMPLIFY_TOLERANCE,
+      highestQuality: true,
+    });
+    if (simplifiedFlatPoints.length < 6) {
+      return points;
+    }
+
+    const simplifiedPoints = this.flatNumbersToCoords(simplifiedFlatPoints);
+    if (simplifiedPoints.length < 3) {
+      return points;
+    }
+
+    return simplifiedPoints;
+  };
+
+  private flatNumbersToCoords = (points: number[]): Coordinate[] => {
+    const coords: Coordinate[] = [];
+    for (let i = 0; i < points.length; i += 2) {
+      const x = points[i];
+      const y = points[i + 1];
+      if (x === undefined || y === undefined) {
+        continue;
+      }
+      coords.push({ x, y });
+    }
+    return coords;
+  };
+
+  private getActiveInpaintMaskId = (): string | null => {
+    const canvasState = this.manager.stateApi.getCanvasState();
+    if (canvasState.inpaintMasks.isHidden) {
+      return null;
+    }
+
+    const selectedEntityIdentifier = canvasState.selectedEntityIdentifier;
+    if (selectedEntityIdentifier?.type === 'inpaint_mask') {
+      const selectedMask = canvasState.inpaintMasks.entities.find((entity) => entity.id === selectedEntityIdentifier.id);
+      if (selectedMask?.isEnabled) {
+        return selectedMask.id;
+      }
+      // If the selected mask is disabled, commit to a new mask instead.
+      return null;
+    }
+
+    const inpaintMasks = canvasState.inpaintMasks.entities;
+    const activeMask = [...inpaintMasks].reverse().find((entity) => entity.isEnabled);
     return activeMask?.id ?? null;
   };
 

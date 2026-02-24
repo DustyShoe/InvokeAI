@@ -39,6 +39,7 @@ Konva.dragButtons = [0];
 const KEY_ESCAPE = 'Escape';
 const KEY_SPACE = ' ';
 const KEY_ALT = 'Alt';
+const CODE_SPACE = 'Space';
 
 type CanvasToolModuleConfig = {
   BRUSH_SPACING_TARGET_SCALE: number;
@@ -349,7 +350,16 @@ export class CanvasToolModule extends CanvasModuleBase {
     }
 
     if (tool === 'lasso') {
-      if (this.manager.stateApi.getRenderedEntityCount() === 0) {
+      const canvasState = this.manager.stateApi.getCanvasState();
+      const hasVisibleRasterContent =
+        !canvasState.rasterLayers.isHidden &&
+        canvasState.rasterLayers.entities.some((layer) => layer.isEnabled && layer.objects.length > 0);
+
+      if (!hasVisibleRasterContent) {
+        return false;
+      }
+
+      if (canvasState.inpaintMasks.isHidden) {
         return false;
       }
 
@@ -669,6 +679,7 @@ export class CanvasToolModule extends CanvasModuleBase {
   };
 
   onKeyDown = (e: KeyboardEvent) => {
+    const isSpaceKey = e.key === KEY_SPACE || e.code === CODE_SPACE;
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
       return;
     }
@@ -705,9 +716,10 @@ export class CanvasToolModule extends CanvasModuleBase {
       return;
     }
 
-    if (e.key === KEY_SPACE) {
+    if (isSpaceKey) {
       // Select the view tool on space key down
       e.preventDefault();
+      e.stopPropagation();
       const currentTool = this.$tool.get();
       this.$toolBuffer.set(currentTool);
       this.manager.stateApi.$spaceKey.set(true);
@@ -722,12 +734,9 @@ export class CanvasToolModule extends CanvasModuleBase {
     }
 
     if (e.key === KEY_ALT) {
-      if (this.$tool.get() === 'lasso') {
-        e.preventDefault();
-        return;
-      }
       // Select the color picker on alt key down
       e.preventDefault();
+      e.stopPropagation();
       this.$toolBuffer.set(this.$tool.get());
       this.$tool.set('colorPicker');
     }
@@ -747,9 +756,10 @@ export class CanvasToolModule extends CanvasModuleBase {
       return;
     }
 
-    if (e.key === KEY_SPACE) {
+    if (e.key === KEY_SPACE || e.code === CODE_SPACE) {
       // Revert the tool to the previous tool on space key up
       e.preventDefault();
+      e.stopPropagation();
       this.revertToolBuffer();
       this.manager.stateApi.$spaceKey.set(false);
       return;
@@ -758,6 +768,7 @@ export class CanvasToolModule extends CanvasModuleBase {
     if (e.key === KEY_ALT) {
       // Revert the tool to the previous tool on alt key up
       e.preventDefault();
+      e.stopPropagation();
       this.revertToolBuffer();
       return;
     }
