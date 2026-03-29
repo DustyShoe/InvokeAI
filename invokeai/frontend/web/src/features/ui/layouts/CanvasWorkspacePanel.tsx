@@ -1,4 +1,4 @@
-import { ContextMenu, Divider, Flex, IconButton, Menu, MenuButton, MenuList } from '@invoke-ai/ui-library';
+import { Box, ContextMenu, Divider, Flex, IconButton, Menu, MenuButton, MenuList } from '@invoke-ai/ui-library';
 import { useAppSelector } from 'app/store/storeHooks';
 import { CanvasAlertsBboxVisibility } from 'features/controlLayers/components/CanvasAlerts/CanvasAlertsBboxVisibility';
 import { CanvasAlertsInvocationProgress } from 'features/controlLayers/components/CanvasAlerts/CanvasAlertsInvocationProgress';
@@ -22,8 +22,8 @@ import { Transform } from 'features/controlLayers/components/Transform/Transform
 import { CanvasManagerProviderGate } from 'features/controlLayers/contexts/CanvasManagerProviderGate';
 import { selectDynamicGrid, selectShowHUD } from 'features/controlLayers/store/canvasSettingsSlice';
 import { selectCanvasSessionId } from 'features/controlLayers/store/canvasStagingAreaSlice';
-import { memo, useCallback } from 'react';
-import { PiDotsThreeOutlineVerticalFill } from 'react-icons/pi';
+import { memo, useCallback, useState } from 'react';
+import { PiArrowsLeftRightBold, PiDotsThreeOutlineVerticalFill } from 'react-icons/pi';
 
 import { StagingArea } from './StagingArea';
 
@@ -51,14 +51,55 @@ const canvasBgSx = {
   },
 };
 
+const mirroredCanvasLayerSx = {
+  position: 'absolute',
+  inset: 0,
+  transformOrigin: 'center',
+  transitionProperty: 'transform',
+  transitionDuration: 'normal',
+  transitionTimingFunction: 'ease-in-out',
+  '&[data-mirrored="true"]': {
+    transform: 'scaleX(-1)',
+  },
+};
+
+const mirroredCanvasBadgeSx = {
+  position: 'absolute',
+  bottom: 2,
+  left: '50%',
+  transform: 'translateX(-50%)',
+  px: 3,
+  py: 1,
+  borderRadius: 'full',
+  bg: 'base.800',
+  color: 'base.100',
+  fontSize: 'xs',
+  fontWeight: 'semibold',
+  pointerEvents: 'none',
+  whiteSpace: 'nowrap',
+};
+
 export const CanvasWorkspacePanel = memo(() => {
   const dynamicGrid = useAppSelector(selectDynamicGrid);
   const showHUD = useAppSelector(selectShowHUD);
   const sessionId = useAppSelector(selectCanvasSessionId);
+  const [isMirroredPreview, setIsMirroredPreview] = useState(false);
 
   const renderMenu = useCallback(() => {
     return <MenuContent />;
   }, []);
+
+  const toggleMirroredPreview = useCallback(() => {
+    setIsMirroredPreview((current) => !current);
+  }, []);
+
+  const preventPreviewInteraction = useCallback(
+    (event: { preventDefault: () => void; stopPropagation: () => void }) => {
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    []
+  );
 
   return (
     <StagingAreaContextProvider sessionId={sessionId}>
@@ -80,9 +121,27 @@ export const CanvasWorkspacePanel = memo(() => {
         <ContextMenu<HTMLDivElement> renderMenu={renderMenu} withLongPress={false}>
           {(ref) => (
             <Flex ref={ref} sx={canvasBgSx} data-dynamic-grid={dynamicGrid}>
-              <InvokeCanvasComponent />
+              <Flex sx={mirroredCanvasLayerSx} data-mirrored={isMirroredPreview}>
+                <InvokeCanvasComponent />
+              </Flex>
+              {isMirroredPreview && (
+                <>
+                  <Flex
+                    position="absolute"
+                    inset={0}
+                    cursor="not-allowed"
+                    onPointerDown={preventPreviewInteraction}
+                    onPointerMove={preventPreviewInteraction}
+                    onPointerUp={preventPreviewInteraction}
+                    onDoubleClick={preventPreviewInteraction}
+                    onWheel={preventPreviewInteraction}
+                    onContextMenu={preventPreviewInteraction}
+                  />
+                  <Box sx={mirroredCanvasBadgeSx}>Mirrored Preview • View Only</Box>
+                </>
+              )}
               <CanvasManagerProviderGate>
-                <CanvasTextOverlay />
+                {!isMirroredPreview && <CanvasTextOverlay />}
                 <Flex
                   position="absolute"
                   flexDir="column"
@@ -101,7 +160,14 @@ export const CanvasWorkspacePanel = memo(() => {
                   <CanvasAlertsInvocationProgress />
                   <CanvasAlertsBboxVisibility />
                 </Flex>
-                <Flex position="absolute" top={1} insetInlineEnd={1}>
+                <Flex position="absolute" top={1} insetInlineEnd={1} gap={2}>
+                  <IconButton
+                    aria-label={isMirroredPreview ? 'Disable mirrored preview' : 'Enable mirrored preview'}
+                    tooltip={isMirroredPreview ? 'Disable mirrored preview' : 'Enable mirrored preview'}
+                    icon={<PiArrowsLeftRightBold />}
+                    colorScheme={isMirroredPreview ? 'invokeBlue' : 'base'}
+                    onClick={toggleMirroredPreview}
+                  />
                   <Menu>
                     <MenuButton as={IconButton} icon={<PiDotsThreeOutlineVerticalFill />} colorScheme="base" />
                     <MenuContent />
