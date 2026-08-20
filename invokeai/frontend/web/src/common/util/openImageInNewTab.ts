@@ -1,4 +1,4 @@
-export type ViewerTransform = {
+type ViewerTransform = {
   scale: number;
   x: number;
   y: number;
