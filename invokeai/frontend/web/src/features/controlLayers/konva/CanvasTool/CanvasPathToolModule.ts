@@ -1,8 +1,10 @@
+import { objectEquals } from '@observ33r/object-equals';
 import { deepClone } from 'common/util/deepClone';
 import type { CanvasManager } from 'features/controlLayers/konva/CanvasManager';
 import { CanvasModuleBase } from 'features/controlLayers/konva/CanvasModuleBase';
 import type { CanvasToolModule } from 'features/controlLayers/konva/CanvasTool/CanvasToolModule';
 import { addCoords, getPrefixedId, offsetCoord } from 'features/controlLayers/konva/util';
+import { entitySelected } from 'features/controlLayers/store/canvasSlice';
 import type {
   CanvasBezierPathState,
   CanvasEntityIdentifier,
@@ -121,7 +123,7 @@ const DEFAULT_CONFIG: CanvasPathToolModuleConfig = {
   HANDLE_LINE_WIDTH_PX: 1,
   HANDLE_PULL_INTENT_THRESHOLD_PX: 3,
   PATH_HIT_TOLERANCE_PX: 10,
-  JOIN_POINT_WELD_RADIUS_PX: 12,
+  JOIN_POINT_WELD_RADIUS_PX: 32,
   PREVIEW_STROKE_COLOR: 'rgba(90, 175, 255, 1)',
   PREVIEW_STROKE_WIDTH_PX: 1.5,
   PREVIEW_POINT_FILL: 'rgba(255, 255, 255, 1)',
@@ -166,6 +168,7 @@ export class CanvasPathToolModule extends CanvasModuleBase {
 
   $editSession = atom<CanvasPathEditSession | null>(null);
   $isExitConfirmationOpen = atom(false);
+  private pendingEditExitAction: (() => void) | null = null;
 
   private activeEntityIdentifier: CanvasEntityIdentifier<'vector_layer'> | null = null;
   private points: Coordinate[] = [];
@@ -321,11 +324,13 @@ export class CanvasPathToolModule extends CanvasModuleBase {
       return;
     }
 
-    const previousBaseTool = existingSession?.previousBaseTool ?? this.getPreviousBaseTool();
     if (existingSession) {
-      this.acceptEditSession(false);
+      this.requestEditExit(() => this.startEdit(entityIdentifier));
+      return;
     }
+    const previousBaseTool = this.getPreviousBaseTool();
 
+    this.manager.stateApi.store.dispatch(entitySelected({ entityIdentifier }));
     this.resetCreateState();
     const snapshotPaths = deepClone(adapter.state.paths);
     const activePathId = snapshotPaths[0]?.id ?? null;
@@ -356,6 +361,7 @@ export class CanvasPathToolModule extends CanvasModuleBase {
 
   acceptEditSession = (restoreTool = true) => {
     const session = this.$editSession.get();
+    this.pendingEditExitAction = null;
     this.$isExitConfirmationOpen.set(false);
     this.$editSession.set(null);
     if (session && restoreTool) {
@@ -365,6 +371,7 @@ export class CanvasPathToolModule extends CanvasModuleBase {
   };
 
   cancelToolChange = () => {
+    this.pendingEditExitAction = null;
     if (!this.hasActiveEditSession()) {
       this.$isExitConfirmationOpen.set(false);
       return;
@@ -373,6 +380,31 @@ export class CanvasPathToolModule extends CanvasModuleBase {
     this.$isExitConfirmationOpen.set(false);
     this.activateEditTool();
     this.render();
+  };
+
+  requestEditExit = (action: () => void) => {
+    if (!this.hasActiveEditSession()) {
+      action();
+      return;
+    }
+    if (this.$isExitConfirmationOpen.get()) {
+      return;
+    }
+    this.pendingEditExitAction = action;
+    this.$isExitConfirmationOpen.set(true);
+  };
+
+  confirmEditExit = (decision: 'apply' | 'discard') => {
+    const action = this.pendingEditExitAction;
+    if (!this.$isExitConfirmationOpen.get() || !action) {
+      return;
+    }
+    if (decision === 'apply') {
+      this.acceptEditSession();
+    } else {
+      this.discardEditSession();
+    }
+    action();
   };
 
   resetEditSession = () => {
@@ -585,7 +617,6 @@ export class CanvasPathToolModule extends CanvasModuleBase {
       entityIdentifier: session.entityIdentifier,
       pathId: session.activePathId,
     });
-    this.acceptEditSession();
   };
 
   startTransformActivePath = async () => {
@@ -821,7 +852,9 @@ export class CanvasPathToolModule extends CanvasModuleBase {
     }
     if (tool !== 'path' && !this.isTemporaryToolSwitch(tool, this.parent.$baseTool.get())) {
       if (this.hasActiveEditSession()) {
-        this.$isExitConfirmationOpen.set(true);
+        const requestedTool = this.parent.$baseTool.get();
+        this.requestEditExit(() => this.parent.setBaseTool(requestedTool));
+        this.activateEditTool();
         this.render();
         return;
       }
@@ -1079,11 +1112,15 @@ export class CanvasPathToolModule extends CanvasModuleBase {
       return;
     }
 
-    this.manager.stateApi.replaceVectorPaths({
-      entityIdentifier: session.entityIdentifier,
-      paths: deepClone(session.snapshotPaths),
-      undoGroup: session.id,
-    });
+    this.pendingEditExitAction = null;
+    const adapter = this.manager.getAdapter(session.entityIdentifier);
+    if (adapter?.state.type === 'vector_layer' && !objectEquals(adapter.state.paths, session.snapshotPaths)) {
+      this.manager.stateApi.replaceVectorPaths({
+        entityIdentifier: session.entityIdentifier,
+        paths: deepClone(session.snapshotPaths),
+        undoGroup: session.id,
+      });
+    }
     this.$isExitConfirmationOpen.set(false);
     this.$editSession.set(null);
     if (restoreTool) {
@@ -1916,6 +1953,30 @@ export class CanvasPathToolModule extends CanvasModuleBase {
     return bestHit ? { pathId: bestHit.pathId } : null;
   };
 
+  isEditPathAtPosition = (stagePosition: Coordinate): boolean => {
+    const session = this.$editSession.get();
+    const adapter = this.getEditSessionAdapter();
+    if (!session || !adapter) {
+      return false;
+    }
+
+    const point = this.getEntityRelativePoint(stagePosition, adapter.state.position);
+    return Boolean(
+      this.findAnchorHit(
+        adapter.state.paths,
+        point,
+        this.manager.stage.unscale(this.config.ANCHOR_RADIUS_PX + 4),
+        session.activePathId
+      ) ||
+      this.findPathHit(
+        adapter.state.paths,
+        point,
+        this.manager.stage.unscale(this.config.PATH_HIT_TOLERANCE_PX),
+        getBezierPathHitSamplesPerSegment(this.manager.stage.getScale())
+      )
+    );
+  };
+
   deleteSelectedPointsOrActivePath = () => {
     const session = this.$editSession.get();
     const activeEntity = this.getEditSessionAdapter();
@@ -1974,6 +2035,9 @@ export class CanvasPathToolModule extends CanvasModuleBase {
       return null;
     }
 
+    if (t <= 1e-6 || t >= 1 - 1e-6) {
+      return null;
+    }
     const split = splitBezierSegmentAt(from, to, t);
     from.outHandle = split.fromOutHandle;
     to.inHandle = split.toInHandle;

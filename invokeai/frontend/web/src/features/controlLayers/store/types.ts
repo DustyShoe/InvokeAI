@@ -735,7 +735,7 @@ const zCanvasControlLayerState = zCanvasRasterLayerState.extend({
 });
 export type CanvasControlLayerState = z.infer<typeof zCanvasControlLayerState>;
 
-const zCanvasVectorLayerState = zCanvasEntityBase.extend({
+export const zCanvasVectorLayerState = zCanvasEntityBase.extend({
   type: z.literal('vector_layer'),
   position: zCoordinate,
   opacity: zOpacity,

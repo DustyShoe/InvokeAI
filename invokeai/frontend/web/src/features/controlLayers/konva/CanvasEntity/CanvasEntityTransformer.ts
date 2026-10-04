@@ -626,7 +626,20 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
     this.manager.stateApi.setEntityPosition({ entityIdentifier: this.parent.entityIdentifier, position });
   };
 
+  getIsTransformingVectorPath = () => this.vectorPathId !== null && this.$isTransforming.get();
+
   nudgeBy = (offset: Coordinate) => {
+    if (this.getIsTransformingVectorPath()) {
+      if (this.$isProcessing.get()) {
+        return;
+      }
+      // Keep path nudges in the transform preview so Apply/Cancel retain their transaction semantics.
+      const position = this.konva.proxyRect.position();
+      this.konva.proxyRect.position({ x: position.x + offset.x, y: position.y + offset.y });
+      this.syncObjectGroupWithProxyRect();
+      return;
+    }
+
     // We can immediately move both the proxy rect and layer objects so we don't have to wait for a redux round-trip,
     // which can take up to 2ms in my testing. This is optional, but can make the interaction feel more responsive,
     // especially on lower-end devices.
@@ -877,6 +890,9 @@ export class CanvasEntityTransformer extends CanvasModuleBase {
       // Path edits can schedule many bbox updates. Drop the pending coalesced update because this transform computes its
       // own bbox directly from the active path.
       this.requestRectCalculation.cancel();
+    } else {
+      // Start the pending calculation before joining its mutex queue; otherwise Transform can use stale bounds.
+      this.requestRectCalculation.flush();
     }
     // This will be released when the transformation is stopped
     await this.transformMutex.acquire();
